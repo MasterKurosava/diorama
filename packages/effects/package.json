@@ -1,0 +1,41 @@
+{
+  "name": "@diorama/effects",
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@diorama/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "@diorama/source": "./src/runtime/index.ts",
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc"
+  },
+  "peerDependencies": {
+    "@diorama/core": "workspace:^",
+    "@diorama/render": "workspace:^",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@diorama/core": "workspace:*",
+    "@diorama/render": "workspace:*",
+    "@types/three": "^0.187.0",
+    "three": "^0.187.0",
+    "tsdown": "0.23.4",
+    "typescript": "^7.0.2"
+  }
+}

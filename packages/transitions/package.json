@@ -1,0 +1,41 @@
+{
+  "name": "@diorama/transitions",
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@diorama/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc"
+  },
+  "peerDependencies": {
+    "@diorama/core": "workspace:^",
+    "@diorama/effects": "workspace:^"
+  },
+  "peerDependenciesMeta": {
+    "@diorama/effects": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@diorama/core": "workspace:*",
+    "@diorama/effects": "workspace:*",
+    "@types/node": "26.6.6",
+    "@types/three": "^0.187.0",
+    "three": "^0.187.0",
+    "tsdown": "0.23.4",
+    "typescript": "^7.0.2"
+  }
+}

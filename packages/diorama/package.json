@@ -1,0 +1,83 @@
+{
+  "name": "diorama",
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@diorama/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./generated": {
+      "@diorama/source": "./src/generated.ts",
+      "types": "./dist/generated.d.ts",
+      "default": "./dist/generated.js"
+    },
+    "./vite": {
+      "@diorama/source": "./src/vite.ts",
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    },
+    "./astro": {
+      "@diorama/source": "./src/astro.ts",
+      "types": "./dist/astro.d.ts",
+      "default": "./dist/astro.js"
+    },
+    "./nuxt": {
+      "@diorama/source": "./src/nuxt.ts",
+      "types": "./dist/nuxt.d.ts",
+      "default": "./dist/nuxt.js"
+    },
+    "./next": {
+      "@diorama/source": "./src/next.ts",
+      "types": "./dist/next.d.ts",
+      "default": "./dist/next.js"
+    },
+    "./auto": {
+      "@diorama/source": "./src/auto.ts",
+      "default": "./dist/cdn/auto.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "diorama": "./bin/diorama.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@diorama/assets": "workspace:^",
+    "@diorama/core": "workspace:^",
+    "@diorama/effects": "workspace:^",
+    "@diorama/gsap": "workspace:^",
+    "@diorama/lenis": "workspace:^",
+    "@diorama/media": "workspace:^",
+    "@diorama/render": "workspace:^",
+    "@diorama/transitions": "workspace:^"
+  },
+  "peerDependencies": {
+    "three": "^0.187.0",
+    "vite": ">=6"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "@types/three": "^0.187.0",
+    "three": "^0.187.0",
+    "tsdown": "0.23.4",
+    "typescript": "^7.0.2",
+    "vite": "8.3.5"
+  }
+}
