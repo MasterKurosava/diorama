@@ -221,9 +221,11 @@ export function frozen(
   const thawed = smoothstep(thawReach, thawReach.sub(EDGE * 0.5), fromThaw).mul(
     thawing,
   ) as unknown as F
+  // Only where there was ice to melt: a thaw that passes bare glass leaves it dry.
   const wet = smoothstep(thawReach.sub(EDGE * 2.2), thawReach.sub(EDGE * 0.4), fromThaw)
     .mul(thawed)
-    .mul(thawing) as unknown as F
+    .mul(thawing)
+    .mul(edge) as unknown as F
   const slush = smoothstep(thawReach.add(EDGE * 1.6), thawReach, fromThaw).mul(
     thawing,
   ) as unknown as F

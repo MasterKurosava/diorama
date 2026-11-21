@@ -84,8 +84,10 @@ export const SLIDE = 6
 const PIECE = 3
 /** Width of the thaw front behind which drops appear, px; the same as frost's. */
 const EDGE = 80
-/** Resting drops evaporate after about this share of `dry`, fading over their last second. */
+/** Resting drops evaporate after about this share of `dry`. */
 const REST = 0.5
+/** Seconds a drop takes to fade out; a drop that stops running or growing has at least this. */
+export const FADE = 1
 /** A runner keeps running until it shrinks below this share of the slide radius. */
 const KEEP = 0.62
 /** Share of the meltwater drops that gather enough water to run. */
@@ -176,10 +178,14 @@ export class Glass {
       }
     }
     if (this.drops.length >= this.pool) {
-      // The oldest resting drop dries at once to make room.
-      const oldest = this.drops.findIndex((drop) => drop.vy === 0)
-      if (oldest < 0) return undefined
-      this.drops.splice(oldest, 1)
+      // The faintest resting drop makes room, the one closest to gone anyway.
+      let faintest = -1
+      this.drops.forEach((drop, i) => {
+        if (drop.vy !== 0) return
+        if (faintest < 0 || drop.life < (this.drops[faintest] as Drop).life) faintest = i
+      })
+      if (faintest < 0) return undefined
+      this.drops.splice(faintest, 1)
     }
     const random = this.#random
     const drop: Drop = {
@@ -260,7 +266,7 @@ export class Glass {
           // Used up: what is left stays as a bead and evaporates.
           drop.running = false
           drop.vy = 0
-          drop.life = weather.dry * REST * (0.4 + 0.4 * random())
+          drop.life = Math.max(FADE, weather.dry * REST * (0.4 + 0.4 * random()))
         }
         drop.life -= dt
         continue
@@ -353,7 +359,8 @@ export class Glass {
     const goal =
       random() < RUNNERS ? slide * (1.05 + random() * 0.6) : drop.r * (1 + random() * 0.2)
     drop.grow = Math.max(0, goal - drop.r) / drop.fed
-    drop.life = Math.max(drop.life, drop.fed + weather.dry * REST * random())
+    // When it stops growing it is fully there, so its fade starts from whole.
+    drop.life = Math.max(drop.life, drop.fed + Math.max(FADE, weather.dry * REST * random()))
   }
 
   /** A small bead left behind by a running drop. */
@@ -719,6 +726,11 @@ function instancedQuads(
   return geometry
 }
 
+/** How much of a drop shows: whole while it runs or grows, then fading over its last {@link FADE}. */
+export function opacity(drop: Drop): number {
+  return drop.running || drop.fed > 0 ? 1 : Math.min(1, Math.max(0, drop.life) / FADE)
+}
+
 /** Copies the glass into the instance buffers. */
 function copyToBuffers(
   glass: Glass,
@@ -731,8 +743,7 @@ function copyToBuffers(
     drop[i * 4] = d.x
     drop[i * 4 + 1] = d.y
     drop[i * 4 + 2] = d.r
-    // Drops at rest fade over their last second.
-    drop[i * 4 + 3] = d.running || d.fed > 0 ? 1 : Math.min(1, d.life)
+    drop[i * 4 + 3] = opacity(d)
     // The tail stretches with the slide speed.
     shape[i * 2] = d.vy > 0 ? Math.min(1.4, d.vy / 260) : 0
     shape[i * 2 + 1] = d.seed

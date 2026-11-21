@@ -196,6 +196,8 @@ export class Pane {
       alpha = thick.mul(0.55).add(crystals.mul(0.75)).add(glints) as unknown as F
       rgb = mix(tint.mul(vec3(0.76, 0.85, 0.95)), vec3(1), white) as unknown as V3
     }
+    // How much ice there is here, before a thaw or a wipe takes it.
+    const thickness = alpha.clamp(0, 0.96) as unknown as F
     // A wiped band keeps a rim of water; the slush ahead of a thaw goes clear and glossy, and
     // the glass behind it is wet for a while.
     // Only where the glass turns from fogged to clear, not over a thin fog that came back.
@@ -203,7 +205,12 @@ export class Pane {
       .mul(smoothstep(0.7, 0.5, clear))
       .mul(ice)
     alpha = alpha.mul(slush.mul(0.55).oneMinus()).add(rim.mul(0.12)) as unknown as F
-    const shine = wet.mul(smoothstep(0.55, 0.8, fine.b)).mul(0.16)
+    // The water is as heavy as the ice was: a thin veil leaves a faint sheen, wiped glass none.
+    const shine = wet
+      .mul(smoothstep(0.55, 0.8, fine.b))
+      .mul(0.16)
+      .mul(smoothstep(0.04, 0.4, thickness))
+      .mul(fog)
     rgb = mix(rgb, vec3(1), rim.mul(0.5)) as unknown as V3
     // Reduced motion: only a faint cold tint.
     const strength = mix(1, 0.32, calm.y)
