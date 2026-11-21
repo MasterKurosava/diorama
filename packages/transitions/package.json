@@ -1,14 +1,37 @@
 {
-  "name": "@diorama/transitions",
-  "version": "0.0.0",
+  "name": "@dioramajs/transitions",
+  "version": "0.1.0",
+  "description": "Page transitions for Diorama: keyed flights between pages and page covers.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl",
+    "page-transitions",
+    "view-transitions"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/transitions"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
-      "@diorama/source": "./src/index.ts",
+      "@dioramajs/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./cover": {
+      "@dioramajs/source": "./src/cover/index.ts",
+      "types": "./dist/cover/index.d.ts",
+      "default": "./dist/cover/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -21,21 +44,28 @@
     "typecheck": "tsc"
   },
   "peerDependencies": {
-    "@diorama/core": "workspace:^",
-    "@diorama/effects": "workspace:^"
+    "@dioramajs/core": "workspace:^",
+    "@dioramajs/effects": "workspace:^",
+    "three": "^0.187.0"
   },
   "peerDependenciesMeta": {
-    "@diorama/effects": {
+    "@dioramajs/effects": {
+      "optional": true
+    },
+    "three": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@diorama/core": "workspace:*",
-    "@diorama/effects": "workspace:*",
+    "@dioramajs/core": "workspace:*",
+    "@dioramajs/effects": "workspace:*",
     "@types/node": "26.6.6",
     "@types/three": "^0.187.0",
     "three": "^0.187.0",
     "tsdown": "0.23.4",
     "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

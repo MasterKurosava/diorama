@@ -1,5 +1,7 @@
-import type { Off } from '@diorama/core'
-import { defineEffect } from '../define'
+// `ctx.layers(selector)`: live lists of the layers of matching descendants, re-evaluated after
+// each reconcile. Each match is leased, and bare media get the `image` effect to draw them.
+import type { Off } from '@dioramajs/core'
+import { defineEffect } from '../effect'
 import type { Effect, Layer } from '../types'
 import type { Phase } from './instance'
 import type { LayerImpl } from './layer'
@@ -10,11 +12,13 @@ import type { World } from './world'
 export const image: Effect<Record<never, never>> = /*#__PURE__*/ defineEffect({
   name: 'image',
   media: true,
+  quality: {},
   setup({ surface }) {
     surface.segments(1)
   },
 })
 
+/** One `layers()` call: the list it returned, kept live, and a release per match. */
 interface Query {
   readonly phase: Phase
   readonly selector: string
@@ -57,26 +61,26 @@ export class Queries {
   #evaluate(query: Query): void {
     const world = this.#world
     const found = [...query.phase.inst.rec.element.querySelectorAll(query.selector)]
-    const set = new Set(found)
+    const matched = new Set(found)
     let changed = false
-    for (const [el, off] of query.items) {
-      if (set.has(el)) continue
+    for (const [element, off] of query.items) {
+      if (matched.has(element)) continue
       off()
-      query.items.delete(el)
+      query.items.delete(element)
       changed = true
     }
-    for (const el of found) {
-      if (query.items.has(el)) continue
-      const offs: Off[] = [world.lease(el)]
-      if (isMedia(el)) offs.push(world.host.attach(el, image))
-      query.items.set(el, () => {
+    for (const element of found) {
+      if (query.items.has(element)) continue
+      const offs: Off[] = [world.lease(element)]
+      if (isMedia(element)) offs.push(world.host.attach(element, image))
+      query.items.set(element, () => {
         for (const off of offs) off()
       })
       changed = true
     }
     if (!changed) return
     query.list.length = 0
-    for (const el of found) query.list.push(world.layers.get(el) as LayerImpl)
+    for (const element of found) query.list.push(world.layers.get(element) as LayerImpl)
     world.invalidate()
   }
 }

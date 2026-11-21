@@ -1,4 +1,4 @@
-import type { Cleanup, Off } from '@diorama/core'
+import type { Cleanup, Off } from '@dioramajs/core'
 import type { PageScope } from './types'
 
 /** Scope of one page, closed when the next page replaces it. */
@@ -23,7 +23,7 @@ export class Page implements PageScope {
     }
     this.#cleanups.push(run)
     return () => {
-      this.#cleanups = this.#cleanups.filter((c) => c !== run)
+      this.#cleanups = this.#cleanups.filter((other) => other !== run)
     }
   }
 

@@ -1,17 +1,21 @@
-import {
-  type Off,
-  type PluginApp,
-  type ReadonlySignal,
-  type Services,
-  type Signal,
-  signal,
-} from '@diorama/core'
-import type { RenderApi } from '@diorama/render'
+// The controller of the light part. It keeps one record per (element, effect) pair, follows the
+// sources that ask for it (markup tokens, `attach` handles, selector rules) and moves each record
+// through its statuses: waiting, loading, running, parked, off, unavailable, failed, disposed.
+// Params resolve in cascade.ts; the DOM side, the engine gate and the runtime sit behind ports.
+import { type Off, signal } from '@dioramajs/core'
 import { recheck, resolve, validate, values } from './cascade'
-import { isEffect, query } from './define'
+import { isEffect, mediaQuery } from './define'
 import { EffectError, targetOf } from './errors'
-import { facade, handle } from './facades'
+import { handleFacade, instanceFacade } from './facades'
 import { kebab, rebuilds } from './params'
+import type {
+  DomPort,
+  EffectsView,
+  EnginePort,
+  HandleState,
+  InstanceRecord,
+  ReleaseReason,
+} from './ports'
 import type { Registry } from './registry'
 import type {
   AnyParamValue,
@@ -21,106 +25,41 @@ import type {
   EffectHandle,
   EffectInstance,
   EffectsStats,
-  EffectsStatus,
   EffectUse,
   InstanceStatus,
-  TakeOptions,
   Target,
 } from './types'
 
-/** The part of `@diorama/assets` effects uses, typed structurally to avoid importing it. */
-export interface AssetsPort {
-  acquire<T>(
-    key: string,
-    make: (context: {
-      readonly signal: AbortSignal
-      decode<R>(work: () => Promise<R>): Promise<R>
-    }) => Promise<{ readonly value: T; readonly bytes?: number; dispose?(): void }>,
-    options?: { readonly priority?: 'high' | 'normal' | 'low'; readonly weight?: number },
-  ): { readonly ready: Promise<T>; release(): void }
-  track(
-    work: PromiseLike<unknown>,
-    options?: { readonly weight?: number; readonly priority?: 'high' | 'normal' | 'low' },
-  ): void
-}
+export type {
+  AssetsPort,
+  DomPort,
+  EffectsView,
+  EnginePort,
+  HandleState,
+  InstanceRecord,
+  ReleaseReason,
+  Runtime,
+  RuntimeHost,
+  Write,
+} from './ports'
 
-export type EffectsView = PluginApp<
-  Pick<Services, 'stage' | 'scroll' | 'pointer' | 'anchors'> & {
-    readonly render?: RenderApi
-    readonly assets?: AssetsPort
-  }
->
+type TrackMode = 'live' | 'layout' | 'frame'
 
-export type ReleaseReason =
-  | 'removed'
-  | 'detached'
-  | 'disabled'
-  | 'failed'
-  | 'engine'
-  | 'destroy'
-  | 'handover'
-  | 'restart'
+const MEDIA_SELECTOR = 'img, video'
+const MOUNTED: ReadonlySet<InstanceStatus> = new Set(['running', 'parked'])
+/** Parked instances are disposed after the next frame, or after this many ms without one. */
+const SWEEP_TIMEOUT = 100
 
-/** What the light part needs from the runtime. Internal. */
-export interface Runtime {
-  /**
-   * Prepares media if declared, runs setup and compiles. Resolves once the attempt settles.
-   * 'aborted' means a newer generation took over.
-   */
-  mount(instance: InstanceRecord, signal: AbortSignal): Promise<'running' | 'failed' | 'aborted'>
-  /** Hides or brings back a mounted instance. `connected` picks the drawn rule. */
-  park(instance: InstanceRecord, parked: boolean, connected: boolean): void
-  /** Writes a live param into its uniform and requests a frame if visible. */
-  write(instance: InstanceRecord, name: string, value: AnyParamValue): void
-  /** Re-runs setup in two phases at the next frame where the instance is visible. */
-  rebuild(instance: InstanceRecord): void
-  /** Disposes everything the instance created and releases layer leases. Needs no frame. */
-  unmount(instance: InstanceRecord, reason: ReleaseReason): void
-  /** Leases a layer for an element without an effect, for `layers()`. */
-  lease(element: Element, owner: InstanceRecord): Off
-  /** Called after a reconcile pass to re-read live `layers()` queries and effect order. */
-  scanned(): void
-  /** The element left the document. Returns true if its copy stays as a ghost. */
-  handover(element: Element): boolean
-  take(element: Element, options?: TakeOptions): Copy
-  stats(): EffectsStats
-  dispose(): void
-}
+export const noop = (): void => {}
 
-/** What the runtime gets from the light part. */
-export interface RuntimeHost {
-  /** Recomputed on each call. */
-  values(instance: InstanceRecord): Readonly<Record<string, AnyParamValue>>
-  /** In effect order: markup tokens first, then code sources. */
-  instancesOf(element: Element): readonly InstanceRecord[]
-  /** Sets the runtime-owned `data-dio-state`. `undefined` hands it back. */
-  present(element: Element, state: 'live' | 'drawn' | undefined): void
-  /** Records a failure inside `mount`, which then resolves 'failed'. */
-  report(instance: InstanceRecord, error: unknown): void
-  /** A mounted instance failed in update or compile. Reports and unmounts it. */
-  fail(instance: InstanceRecord, error: unknown): void
-  /** Device lost or render disabled. Every instance becomes `unavailable`. */
-  lost(): void
-  /** A pose touched this element's layer, so its waiting instances load at once. */
-  wake(element: Element): void
-  pin(element: Element): (() => number) | undefined
-  /** `data-dio-track`, else the attach options. */
-  track(element: Element): 'live' | 'layout' | 'frame'
-  /** The runtime saw the element disconnected. Re-evaluates its instances. */
-  check(element: Element): void
-  /** Media of a failed element changed, so EFFECT_MEDIA and EFFECT_CORS failures wait again. */
-  retry(element: Element): void
-  /** Attach owned by the runtime (`ctx.attach`, `layers()`). A selector stays inside `within`. */
-  attach(target: string | Element, use: Effect | EffectUse, within?: Element): EffectHandle
-  /** Plugins started after `effects`. The drawn hook runs after them. */
-  plugins(): readonly string[]
-  /** One warning per (element, key). */
-  warn(key: string, error: EffectError): void
-  /** Sets `data-dio-state="entering"`. The light part owns veils. */
-  veil(element: Element, on: boolean): void
-  /** Adds the element to the next reconcile without flushing now. */
-  queue(element: Element): void
-}
+export const NO_STATS: EffectsStats = Object.freeze({
+  layers: 0,
+  ghosts: 0,
+  copies: 0,
+  instances: 0,
+  textures: 0,
+  bitmaps: 0,
+})
 
 /** Copy nobody controls. Released, never ready, ignores writes. */
 export function inertCopy(element: Element): Copy {
@@ -154,137 +93,46 @@ export function inertCopy(element: Element): Copy {
   return copy as unknown as Copy
 }
 
-export const NO_STATS: EffectsStats = Object.freeze({
-  layers: 0,
-  ghosts: 0,
-  copies: 0,
-  instances: 0,
-  textures: 0,
-  bitmaps: 0,
-})
-
-export interface Write {
-  readonly value: unknown
-  readonly seq: number
-}
-
-export interface InstanceRecord {
-  readonly element: Element
-  readonly name: string
-  readonly facade: EffectInstance
-  readonly state: Signal<InstanceStatus>
-  status: InstanceStatus
-  error: unknown
-  effect: Effect | undefined
-  generation: number
-  abort: AbortController | undefined
-  /** Previous mount attempt. A new one waits for it, so a pair never runs two setups. */
-  settled: Promise<unknown>
-  markup: boolean
-  readonly handles: Set<HandleState>
-  /** `instance.params` writes. They belong to the pair and survive re-creation. */
-  readonly writes: Map<string, Write>
-  /** Values last given to the runtime. */
-  values: Record<string, AnyParamValue>
-  parkedFrame: number
-  /** Creation order on the element, for code sources. */
-  readonly order: number
-  /** Adds accessors for param keys known by now. */
-  sync(): void
-}
-
-export interface HandleState {
-  readonly id: number
-  readonly name: string
-  readonly params: Record<string, unknown>
-  readonly writes: Map<string, Write>
-  readonly options: AttachOptions
-  readonly rule: string | undefined
-  /** Runtime-owned rules match descendants of this element only. */
-  readonly within: Element | undefined
-  readonly refs: WeakRef<Element>[]
-  readonly records: Set<InstanceRecord>
-  live: boolean
-  sync(): void
-}
-
-export const noop = (): void => {}
-const MEDIA = 'img, video'
-const MOUNTED: ReadonlySet<InstanceStatus> = new Set(['running', 'parked'])
-const same = (a: unknown, b: unknown): boolean =>
-  Array.isArray(a) && Array.isArray(b)
-    ? a.length === b.length && a.every((v, i) => v === b[i])
-    : Object.is(a, b)
-
-export interface DomPort {
-  inRoot(element: Element): boolean
-  query(selector: string): Iterable<Element>
-  claim(element: Element): boolean
-  release(element: Element): void
-  /** Re-derives `data-dio-state` of an element. */
-  sync(element: Element): void
-  /** Observes param attributes of loaded effects. An empty list stops observing. */
-  watch(element: Element, attributes: readonly string[]): void
-  rules(active: boolean): void
-  /** Adds or removes the hiding stylesheet. */
-  adopt(on: boolean): void
-  present: WeakMap<Element, 'live' | 'drawn'>
-}
-export interface EnginePort {
-  readonly runtime: Runtime | undefined
-  /** Set once the gate decided that no instance runs. */
-  readonly blocked: 'off' | 'unavailable' | undefined
-  boot(): Promise<Runtime | undefined>
-  /** A near or eager element asks for the engine. Obeys the load mode. */
-  request(eager: boolean): void
-  /** Downloads the engine module without starting `render`. */
-  fetch(): void
-  near(element: Element): boolean
-  /** The observer has reported the element since it was last watched. */
-  reported(element: Element): boolean
-  /** Bumped after each observer callback. */
-  readonly intersections: ReadonlySignal<number>
-  canBoot(): boolean
-  readonly loading: boolean
-  readonly status: ReadonlySignal<EffectsStatus>
-  matches(query: string): boolean
-  reducedMotion(): boolean
-  watch(element: Element, on: boolean): void
-}
-
 /** An unnamed effect attached directly gets a stable generated name. */
-const names = new WeakMap<Effect, string>()
+const generatedNames = new WeakMap<Effect, string>()
 let unnamedCount = 0
-const unnamed = (effect: Effect): string => {
-  let name = names.get(effect)
+
+function nameOf(effect: Effect): string {
+  if (effect.name) return effect.name
+  let name = generatedNames.get(effect)
   if (!name) {
     name = `effect-${++unnamedCount}`
-    names.set(effect, name)
+    generatedNames.set(effect, name)
   }
   return name
 }
 
-/** Instances, sources and the light lifecycle. Params resolve in cascade.ts. */
+/** Records, their sources and the light lifecycle. */
 export class Controller {
   readonly app: EffectsView
   readonly registry: Registry
   dom!: DomPort
   engine!: EnginePort
+  /** Records not disposed. */
   readonly live: Set<InstanceRecord> = new Set()
+  /** Handles with a selector target. */
   readonly rules: Set<HandleState> = new Set()
   /** `app.effects.pin` sources per element, newest last. */
   readonly pins: WeakMap<Element, { readonly source: () => number }[]> = new WeakMap()
   /** Live handles with element targets. While nonzero, added subtrees are searched for them. */
   targets = 0
+  /** Handle ids and write order. The later of two sources wins. */
+  sequence = 0
   readonly #pairs = new WeakMap<Element, Map<string, InstanceRecord>>()
   readonly #tokens = new WeakMap<Element, readonly string[]>()
+  /** Handles that target each element directly. */
   readonly #targets = new WeakMap<Element, Set<HandleState>>()
+  /** `disable(name)` calls not undone yet, per name. */
   readonly #disabled = new Map<string, number>()
   readonly #handles = new Set<HandleState>()
   readonly #warned = new WeakMap<object, Set<string>>()
   readonly #loadErrors = new Map<string, EffectError>()
-  /** Handle ids and write order. The later of two sources wins. */
-  seq = 0
+  /** Disposes parked records once a frame has passed, or after SWEEP_TIMEOUT. */
   #sweep: { timer: ReturnType<typeof setTimeout>; system: Off } | undefined
 
   constructor(app: EffectsView, registry: Registry) {
@@ -302,25 +150,25 @@ export class Controller {
     this.app.log.warn(error.message, error.element ?? '')
   }
 
-  report(rec: InstanceRecord, error: unknown): void {
-    rec.error = error
+  report(record: InstanceRecord, error: unknown): void {
+    record.error = error
     const aborted = (error as { name?: string } | null)?.name === 'AbortError'
-    if (!aborted) this.app.report(error, targetOf(rec.name, rec.element))
+    if (!aborted) this.app.report(error, targetOf(record.name, record.element))
   }
 
+  /** The record of the pair, created disposed on first use. */
   pair(element: Element, name: string): InstanceRecord {
     let pairs = this.#pairs.get(element)
     if (!pairs) {
       pairs = new Map()
       this.#pairs.set(element, pairs)
     }
-    let rec = pairs.get(name)
-    if (rec) return rec
-    const state = signal<InstanceStatus>('disposed')
-    rec = {
+    const existing = pairs.get(name)
+    if (existing) return existing
+    const record: InstanceRecord = {
       element,
       name,
-      state,
+      state: signal<InstanceStatus>('disposed'),
       facade: undefined as unknown as EffectInstance,
       status: 'disposed',
       error: undefined,
@@ -332,234 +180,140 @@ export class Controller {
       handles: new Set(),
       writes: new Map(),
       values: {},
+      presence: undefined,
       parkedFrame: 0,
       order: pairs.size,
       sync: noop,
     }
-    ;(rec as { facade: EffectInstance }).facade = facade(this, rec)
-    pairs.set(name, rec)
-    return rec
+    ;(record as { facade: EffectInstance }).facade = instanceFacade(this, record)
+    pairs.set(name, record)
+    return record
   }
 
   find(element: Element, name: string): InstanceRecord | undefined {
     return this.#pairs.get(element)?.get(name)
   }
 
-  /** Live instances of an element in effect order. */
+  /** Live instances of an element in effect order: markup tokens first, then code sources. */
   of(element: Element): InstanceRecord[] {
     const pairs = this.#pairs.get(element)
     if (!pairs) return []
     const tokens = this.#tokens.get(element) ?? []
-    const rank = (r: InstanceRecord): number => {
-      const i = r.markup ? tokens.indexOf(r.name) : -1
-      return i < 0 ? tokens.length + r.order : i
+    const rank = (record: InstanceRecord): number => {
+      const index = record.markup ? tokens.indexOf(record.name) : -1
+      return index < 0 ? tokens.length + record.order : index
     }
     return [...pairs.values()]
-      .filter((r) => r.status !== 'disposed')
+      .filter((record) => record.status !== 'disposed')
       .sort((a, b) => rank(a) - rank(b))
   }
 
-  eager(rec: InstanceRecord): boolean {
-    if (rec.element.getAttribute('data-dio-load') === 'eager') return true
-    for (const h of rec.handles) if (h.options.eager) return true
+  eager(record: InstanceRecord): boolean {
+    if (record.element.getAttribute('data-dio-load') === 'eager') return true
+    for (const handle of record.handles) if (handle.options.eager) return true
     return false
   }
 
   /** `data-dio-track`, else the latest attach option among the element's instances. */
-  track(element: Element): 'live' | 'layout' | 'frame' {
-    const attr = element.getAttribute('data-dio-track')
-    if (attr === 'layout' || attr === 'frame') return attr
-    let track: 'live' | 'layout' | 'frame' = 'live'
-    for (const rec of this.of(element))
-      for (const h of rec.handles) track = h.options.track ?? track
+  track(element: Element): TrackMode {
+    const attribute = element.getAttribute('data-dio-track')
+    if (attribute === 'layout' || attribute === 'frame') return attribute
+    let track: TrackMode = 'live'
+    for (const record of this.of(element)) {
+      for (const handle of record.handles) track = handle.options.track ?? track
+    }
     return track
   }
 
-  #status(rec: InstanceRecord, status: InstanceStatus, error?: unknown): void {
-    if (error !== undefined) rec.error = error
-    else if (status === 'waiting' || status === 'loading') rec.error = undefined
-    if (rec.status === status) return
-    const was = rec.status
-    rec.status = status
-    if (status === 'disposed') this.live.delete(rec)
-    else this.live.add(rec)
-    const el = rec.element
-    if (status === 'waiting') this.engine.watch(el, true)
-    else if (was === 'waiting' && !this.of(el).some((r) => r.status === 'waiting')) {
-      this.engine.watch(el, false)
-    }
-    if (!MOUNTED.has(status) && !this.of(el).some((r) => MOUNTED.has(r.status))) {
-      this.dom.present.delete(el)
-    }
-    rec.state.value = status
-    this.app.emit('effects:status', { element: el, effect: rec.name, status, error: rec.error })
-    this.dom.sync(el)
-  }
-
-  #off(rec: InstanceRecord): boolean {
-    if (this.#disabled.has(rec.name) || this.engine.blocked === 'off') return true
-    const def = rec.effect?.['~definition']
-    const motion = this.registry.reducedMotion(rec.name) ?? def?.reducedMotion
+  /** Off by name: disabled, or the entry's (else the definition's) reducedMotion or when. */
+  skips(
+    name: string,
+    effect: Effect | undefined = this.registry.entries.get(name)?.effect,
+  ): boolean {
+    if (this.#disabled.has(name)) return true
+    const def = effect?.['~definition']
+    const motion = this.registry.reducedMotion(name) ?? def?.reducedMotion
     if (motion === 'off' && this.engine.reducedMotion()) return true
-    const when = this.registry.when(rec.name) ?? query(def?.when)
+    const when = this.registry.when(name) ?? mediaQuery(def?.when)
     return when !== undefined && !this.engine.matches(when)
   }
 
-  /** Re-evaluates an instance after its sources, connection or conditions changed. */
-  update(rec: InstanceRecord): void {
-    const connected = this.dom.inRoot(rec.element)
-    if (!connected || (!rec.markup && rec.handles.size === 0)) {
-      this.#drop(rec, connected)
+  /** Re-evaluates a record after its sources, connection or conditions changed. */
+  update(record: InstanceRecord): void {
+    const connected = this.dom.inRoot(record.element)
+    if (!connected || (!record.markup && record.handles.size === 0)) {
+      this.#drop(record, connected)
       return
     }
-    if (rec.status === 'disposed') {
+    const created = record.status === 'disposed'
+    if (created) {
       // Another app owns the element. Keep no source, so it can be claimed later.
-      if (!this.dom.claim(rec.element)) {
-        this.#unlink(rec)
+      if (!this.dom.claim(record.element)) {
+        this.#unlink(record)
         return
       }
-      rec.sync()
-      this.#status(rec, 'waiting')
+      record.sync()
+      this.#setStatus(record, 'waiting')
     }
-    if (this.#off(rec)) this.#stop(rec, 'off', 'disabled')
-    else if (this.engine.blocked === 'unavailable') this.#stop(rec, 'unavailable', 'engine')
-    else this.#resume(rec)
-  }
-
-  #resume(rec: InstanceRecord): void {
-    if (rec.status === 'off' || rec.status === 'unavailable') this.#status(rec, 'waiting')
-    if (rec.status === 'parked') {
-      this.engine.runtime?.park(rec, false, true)
-      this.#status(rec, 'running')
-      this.changed(rec)
-    }
-    this.advance(rec)
-  }
-
-  #drop(rec: InstanceRecord, connected: boolean): void {
-    const el = rec.element
-    // The element left the document. Its copy may live on as a ghost, decided once for all
-    // its records.
-    if (rec.status === 'running' && !el.isConnected && this.engine.runtime?.handover(el)) {
-      for (const r of this.of(el)) this.dispose(r, 'handover')
+    if (this.#isOff(record)) {
+      this.#stop(record, 'off', 'disabled')
       return
     }
-    if (rec.status === 'running') {
-      this.engine.runtime?.park(rec, true, connected)
-      rec.parkedFrame = this.app.loop.time.frame
-      this.#status(rec, 'parked')
-      this.#schedule()
-    } else if (rec.status !== 'parked' && rec.status !== 'disposed') {
-      this.dispose(rec, connected ? 'detached' : 'removed')
+    if (this.engine.blocked === 'unavailable') {
+      this.#stop(record, 'unavailable', 'engine')
+      return
     }
-  }
-
-  /** Releases what the instance holds and sets `status`, abandoning a loading attempt. */
-  #stop(rec: InstanceRecord, status: InstanceStatus, reason: ReleaseReason): void {
-    const loading = rec.status === 'loading'
-    if (loading) {
-      rec.generation++
-      rec.abort?.abort()
+    const { element, name } = record
+    if (created && this.registry.intro(name, element) && this.engine.canBoot()) {
+      this.dom.intro(element)
     }
-    // A mount may have resolved 'running' before its continuation ran, so unmount here too.
-    if (loading || MOUNTED.has(rec.status)) this.engine.runtime?.unmount(rec, reason)
-    this.#status(rec, status)
+    this.#resume(record)
   }
 
-  #unlink(rec: InstanceRecord): void {
-    for (const h of rec.handles) h.records.delete(rec)
-    rec.handles.clear()
-    rec.markup = false
-  }
-
-  dispose(rec: InstanceRecord, reason: ReleaseReason): void {
-    if (rec.status === 'disposed') return
-    this.#stop(rec, 'disposed', reason)
-    this.#unlink(rec)
-    rec.effect = undefined
-    if (!this.of(rec.element).length) {
-      this.dom.release(rec.element)
-      this.dom.watch(rec.element, [])
-    } else this.#watchAttrs(rec.element)
-  }
-
-  advance(rec: InstanceRecord): void {
-    if (rec.status !== 'waiting') return
-    const entry = this.registry.entries.get(rec.name)
+  /** Moves a waiting record toward running as far as the engine and the observer allow. */
+  advance(record: InstanceRecord): void {
+    if (record.status !== 'waiting') return
+    const { engine } = this
+    const entry = this.registry.entries.get(record.name)
     if (!entry) {
-      if (this.engine.runtime) {
+      if (engine.runtime) {
         const known = [...this.registry.entries.keys()].join(', ')
-        const error = new EffectError(
-          'EFFECT_UNKNOWN',
-          `unknown effect "${rec.name}"; known: ${known}`,
-        )
-        this.warn(`unknown:${rec.name}`, error)
+        const message = `unknown effect "${record.name}"; known: ${known}`
+        this.warn(`unknown:${record.name}`, new EffectError('EFFECT_UNKNOWN', message))
       }
       return
     }
-    const eager = this.eager(rec)
-    if (!eager && !this.engine.near(rec.element)) return
+    const eager = this.eager(record)
+    if (!eager && !engine.near(record.element)) return
     // The definition may have loaded since `update` (loaded(), prefetch) and turned it off.
-    if (this.#off(rec)) this.#stop(rec, 'off', 'disabled')
-    else if (this.engine.runtime || this.engine.loading) void this.#mount(rec)
-    else if (entry.failed) this.#status(rec, 'failed', this.#loadError(rec.name))
-    else if (entry.effect || !this.engine.canBoot()) this.engine.request(eager)
-    else {
-      // Load the definition first. It may turn the instance off, and render should start only
-      // for one that stays on.
-      this.engine.fetch()
-      void this.registry.load(rec.name).then(() => {
-        if (rec.status === 'waiting') this.update(rec)
-      })
+    if (this.#isOff(record)) {
+      this.#stop(record, 'off', 'disabled')
+      return
     }
+    const engineComing = !!engine.runtime || engine.loading
+    if (this.registry.unresolved(record.name) && (engineComing || engine.canBoot())) {
+      // The package's map first: its when or reducedMotion may turn the instance off.
+      this.#fetchThenUpdate(record)
+    } else if (engineComing) void this.#mount(record)
+    else if (entry.failed) this.#setStatus(record, 'failed', this.#loadErrors.get(record.name))
+    else if (entry.effect || !engine.canBoot()) engine.request(eager)
+    // Load the definition first, once the gate is open. It may turn the instance off, and
+    // render should start only for one that stays on.
+    else this.#fetchThenUpdate(record)
   }
 
-  async #mount(rec: InstanceRecord): Promise<void> {
-    const gen = ++rec.generation
-    rec.abort?.abort()
-    const abort = new AbortController()
-    rec.abort = abort
-    this.#status(rec, 'loading')
-    const [effect, runtime] = await Promise.all([this.registry.load(rec.name), this.engine.boot()])
-    if (gen !== rec.generation) return
-    if (!effect || !runtime) {
-      if (effect) this.#status(rec, 'waiting')
-      else this.#status(rec, 'failed', this.#loadError(rec.name))
+  dispose(record: InstanceRecord, reason: ReleaseReason): void {
+    if (record.status === 'disposed') return
+    this.#stop(record, 'disposed', reason)
+    this.#unlink(record)
+    record.effect = undefined
+    const { element } = record
+    if (this.of(element).length) {
+      this.#watchAttributes(element)
       return
     }
-    rec.effect = effect
-    rec.values = values(this, rec)
-    this.#watchAttrs(rec.element)
-    if (this.#off(rec)) {
-      this.#stop(rec, 'off', 'disabled')
-      return
-    }
-    const def = effect['~definition']
-    const on = def.on ?? (def.media ? MEDIA : undefined)
-    // An explicit `on` does not lift `media: true`, since preparation waits for img/video events.
-    const media = !def.media || rec.element.matches(MEDIA)
-    if (!media || (on && !rec.element.matches(on))) {
-      const target = media ? on : MEDIA
-      const error = new EffectError('EFFECT_TARGET', `"${rec.name}" applies to "${target}" only`, {
-        effect: rec.name,
-        element: rec.element,
-      })
-      this.warn(`target:${rec.name}`, error)
-      this.#status(rec, 'failed', error)
-      return
-    }
-    await rec.settled
-    if (gen !== rec.generation) return
-    rec.values = values(this, rec)
-    const attempt = runtime.mount(rec, abort.signal).catch((error: unknown) => {
-      this.report(rec, error)
-      return 'failed' as const
-    })
-    rec.settled = attempt
-    const result = await attempt
-    if (gen !== rec.generation || result === 'aborted') return
-    this.#status(rec, result)
-    if (result === 'failed') this.engine.runtime?.unmount(rec, 'failed')
+    this.dom.release(element)
+    this.dom.watch(element, [])
   }
 
   /** A rejected import is reported once. Every instance of the name then fails as it loads. */
@@ -567,81 +321,42 @@ export class Controller {
     this.#loadErrors.set(name, error)
     this.app.report(error, targetOf(name))
   }
-  #loadError(name: string): unknown {
-    return this.#loadErrors.get(name)
-  }
 
   /** `crossorigin` changed, so media failures are not final. */
   retry(element: Element): void {
-    for (const rec of this.of(element)) {
-      const code = (rec.error as { code?: string } | undefined)?.code
-      if (rec.status !== 'failed' || (code !== 'EFFECT_CORS' && code !== 'EFFECT_MEDIA')) continue
-      this.#status(rec, 'waiting')
-      this.advance(rec)
-    }
-  }
-
-  /** Params of loaded effects in both forms, the modes and `crossorigin`. */
-  #watchAttrs(element: Element): void {
-    const list = new Set<string>()
-    for (const rec of this.of(element)) {
-      const def = this.registry.entries.get(rec.name)?.effect?.['~definition']
-      if (!def) continue
-      for (const key of Object.keys(def.params ?? {})) {
-        list.add(`data-dio-${kebab(key)}`).add(`data-dio-${rec.name}-${kebab(key)}`)
+    for (const record of this.of(element)) {
+      const code = (record.error as { code?: string } | undefined)?.code
+      if (record.status !== 'failed' || (code !== 'EFFECT_CORS' && code !== 'EFFECT_MEDIA')) {
+        continue
       }
-      list.add('data-dio-load').add('data-dio-track')
-      if (def.media) list.add('crossorigin')
+      this.#setStatus(record, 'waiting')
+      this.advance(record)
     }
-    this.dom.watch(element, [...list])
   }
 
-  restart(rec: InstanceRecord): void {
-    this.#stop(rec, 'waiting', 'restart')
-    this.advance(rec)
+  restart(record: InstanceRecord): void {
+    this.#stop(record, 'waiting', 'restart')
+    this.advance(record)
   }
 
-  fail(rec: InstanceRecord, error: unknown): void {
-    if (rec.status === 'disposed' || rec.status === 'failed') return
-    this.report(rec, error)
-    this.#stop(rec, 'failed', 'failed')
+  fail(record: InstanceRecord, error: unknown): void {
+    if (record.status === 'disposed' || record.status === 'failed') return
+    this.report(record, error)
+    this.#stop(record, 'failed', 'failed')
   }
 
   /** Re-evaluates live instances after a change of engine, reduced motion or a media query. */
   refresh(name?: string): void {
-    for (const rec of [...this.live]) if (!name || rec.name === name) this.update(rec)
+    for (const record of [...this.live]) if (!name || record.name === name) this.update(record)
   }
 
   /** The runtime is gone (render stopped). Instances wait for the next engine. */
   orphan(): void {
-    for (const rec of [...this.live]) {
-      if (rec.status === 'parked') this.dispose(rec, 'engine')
-      else if (rec.status === 'running' || rec.status === 'loading') {
-        this.#stop(rec, 'waiting', 'engine')
+    for (const record of [...this.live]) {
+      if (record.status === 'parked') this.dispose(record, 'engine')
+      else if (record.status === 'running' || record.status === 'loading') {
+        this.#stop(record, 'waiting', 'engine')
       }
-    }
-  }
-
-  #schedule(): void {
-    if (this.#sweep) return
-    const sweep = (frame?: number): void => {
-      let pending = false
-      for (const rec of [...this.live]) {
-        if (rec.status !== 'parked') continue
-        if (frame === undefined || frame > rec.parkedFrame) {
-          this.dispose(rec, rec.element.isConnected ? 'detached' : 'removed')
-        } else pending = true
-      }
-      if (pending) return
-      clearTimeout(this.#sweep?.timer)
-      this.#sweep?.system()
-      this.#sweep = undefined
-    }
-    this.#sweep = {
-      timer: setTimeout(sweep, 100),
-      system: this.app.system('afterRender', (time) => sweep(time.frame), {
-        name: 'effects:sweep',
-      }),
     }
   }
 
@@ -650,65 +365,48 @@ export class Controller {
       clearTimeout(this.#sweep.timer)
       this.#sweep = undefined
     }
-    for (const rec of [...this.live]) this.dispose(rec, 'destroy')
+    for (const record of [...this.live]) this.dispose(record, 'destroy')
   }
 
   /** Markup tokens of an element changed, or the element was added. */
   markup(element: Element, tokens: readonly string[]): void {
     this.#tokens.set(element, tokens)
     const names = new Set(tokens)
-    for (const rec of this.#pairs.get(element)?.values() ?? []) {
-      if (rec.markup && !names.has(rec.name)) {
-        rec.markup = false
-        this.update(rec)
-      }
+    for (const record of this.#pairs.get(element)?.values() ?? []) {
+      if (!record.markup || names.has(record.name)) continue
+      record.markup = false
+      this.update(record)
     }
     for (const name of names) {
-      const rec = this.pair(element, name)
-      if (rec.markup) continue
-      rec.markup = true
-      this.update(rec)
+      const record = this.pair(element, name)
+      if (record.markup) continue
+      record.markup = true
+      this.update(record)
     }
   }
 
   /** An element entered the root. Handles that target it take it back. */
   added(element: Element): void {
-    for (const h of this.#targets.get(element) ?? []) if (h.live) this.#add(element, h)
-    for (const rec of this.#pairs.get(element)?.values() ?? []) {
-      if (rec.status !== 'disposed') this.update(rec)
+    for (const handle of this.#targets.get(element) ?? []) {
+      if (handle.live) this.#link(element, handle)
     }
-  }
-
-  #add(element: Element, h: HandleState): void {
-    const rec = this.pair(element, h.name)
-    if (h.records.has(rec)) return
-    h.records.add(rec)
-    rec.handles.add(h)
-    this.update(rec)
-    if (rec.status !== 'disposed') this.changed(rec, Object.keys(h.params))
-  }
-
-  #remove(rec: InstanceRecord, h: HandleState): void {
-    if (!h.records.delete(rec)) return
-    rec.handles.delete(h)
-    this.changed(rec, [...Object.keys(h.params), ...h.writes.keys()])
-    this.update(rec)
-  }
-
-  #fits(h: HandleState, el: Element): boolean {
-    const inside = !h.within || (h.within !== el && h.within.contains(el))
-    return inside && el.matches(h.rule as string) && this.dom.inRoot(el)
+    for (const record of this.#pairs.get(element)?.values() ?? []) {
+      if (record.status !== 'disposed') this.update(record)
+    }
   }
 
   /** Re-checks selector rules in a subtree. Elements that stopped matching leave, new ones join. */
   match(root: Element): void {
-    for (const h of this.rules) {
-      for (const rec of [...h.records]) {
-        if (root.contains(rec.element) && !this.#fits(h, rec.element)) this.#remove(rec, h)
+    for (const handle of this.rules) {
+      for (const record of [...handle.records]) {
+        if (root.contains(record.element) && !this.#fits(handle, record.element)) {
+          this.#unlinkHandle(record, handle)
+        }
       }
-      if (this.#fits(h, root)) this.#add(root, h)
-      for (const el of root.querySelectorAll(h.rule as string))
-        if (this.#fits(h, el)) this.#add(el, h)
+      if (this.#fits(handle, root)) this.#link(root, handle)
+      for (const element of root.querySelectorAll(handle.rule as string)) {
+        if (this.#fits(handle, element)) this.#link(element, handle)
+      }
     }
   }
 
@@ -723,16 +421,17 @@ export class Controller {
     let effect: Effect | undefined
     if (typeof use === 'string') name = use
     else {
+      // `attach(target, effect(params), options)`: the params come with the use.
       const resolved = isEffect(use) ? use() : use
       effect = resolved.effect
-      name = effect.name || unnamed(effect)
+      name = nameOf(effect)
       options = params as AttachOptions | undefined
       params = resolved.params
     }
     // Throws a SyntaxError on an invalid selector.
     if (typeof target === 'string') document.createDocumentFragment().querySelector(target)
-    const h: HandleState = {
-      id: ++this.seq,
+    const handle: HandleState = {
+      id: ++this.sequence,
       name,
       params: { ...params },
       writes: new Map(),
@@ -744,76 +443,49 @@ export class Controller {
       live: true,
       sync: noop,
     }
-    const api = handle(this, h)
-    if (effect && !this.#own(name, effect, h)) {
-      h.live = false
+    const api = handleFacade(this, handle)
+    if (effect && !this.#claimName(name, effect, handle)) {
+      handle.live = false
       return api
     }
-    validate(this, h)
+    validate(this, handle)
     const signal = options?.signal
     if (signal?.aborted) {
-      h.live = false
+      handle.live = false
       return api
     }
-    this.#handles.add(h)
-    signal?.addEventListener('abort', () => this.detach(h), { once: true })
+    this.#handles.add(handle)
+    signal?.addEventListener('abort', () => this.detach(handle), { once: true })
     if (typeof target === 'string') {
-      this.rules.add(h)
+      // A selector rule: matches now, and later ones as the DOM changes.
+      this.rules.add(handle)
       this.dom.rules(true)
       const found = within ? within.querySelectorAll(target) : this.dom.query(target)
-      for (const el of found) if (this.#fits(h, el)) this.#add(el, h)
-    } else {
-      this.targets++
-      for (const el of target instanceof Element ? [target] : target) {
-        const set = this.#targets.get(el) ?? new Set()
-        this.#targets.set(el, set.add(h))
-        h.refs.push(new WeakRef(el))
-        if (this.dom.inRoot(el)) this.#add(el, h)
-      }
+      for (const element of found) if (this.#fits(handle, element)) this.#link(element, handle)
+      return api
+    }
+    this.targets++
+    for (const element of target instanceof Element ? [target] : target) {
+      const handles = this.#targets.get(element) ?? new Set()
+      this.#targets.set(element, handles.add(handle))
+      handle.refs.push(new WeakRef(element))
+      if (this.dom.inRoot(element)) this.#link(element, handle)
     }
     return api
   }
 
-  /** An effect passed to `attach` takes a free name only. */
-  #own(name: string, effect: Effect, h: HandleState): boolean {
-    const entry = this.registry.entries.get(name)
-    if (!entry) {
-      this.registry.set(name, effect)
-      return true
-    }
-    if (entry.effect === effect) return true
-    const taken = (): void => {
-      const message = `name "${name}" is taken by another definition; use register() to replace`
-      this.app.report(
-        new EffectError('EFFECT_DEFINITION', message, { effect: name }),
-        targetOf(name),
-      )
-    }
-    // A lazy entry may load this very definition, so check once it has.
-    if (!entry.effect && !entry.failed && !isEffect(entry.source)) {
-      void this.registry.load(name).then((loaded) => {
-        if (loaded === effect || !h.live) return
-        taken()
-        this.detach(h)
-      })
-      return true
-    }
-    taken()
-    return false
-  }
-
-  detach(h: HandleState): void {
-    if (!h.live) return
-    h.live = false
-    this.#handles.delete(h)
-    if (this.rules.delete(h)) {
+  detach(handle: HandleState): void {
+    if (!handle.live) return
+    handle.live = false
+    this.#handles.delete(handle)
+    if (this.rules.delete(handle)) {
       if (!this.rules.size) this.dom.rules(false)
     } else this.targets--
-    for (const ref of h.refs) {
-      const el = ref.deref()
-      if (el) this.#targets.get(el)?.delete(h)
+    for (const ref of handle.refs) {
+      const element = ref.deref()
+      if (element) this.#targets.get(element)?.delete(handle)
     }
-    for (const rec of [...h.records]) this.#remove(rec, h)
+    for (const record of [...handle.records]) this.#unlinkHandle(record, handle)
   }
 
   disable(name: string): Off {
@@ -834,81 +506,71 @@ export class Controller {
   replaced(name: string): void {
     this.#loadErrors.delete(name)
     const gone = !this.registry.entries.has(name)
-    for (const rec of [...this.live]) {
-      if (rec.name !== name) continue
+    for (const record of [...this.live]) {
+      if (record.name !== name) continue
       if (gone) {
-        if (rec.status !== 'off') this.#stop(rec, 'waiting', 'disabled')
-        continue
+        if (record.status !== 'off') this.#stop(record, 'waiting', 'disabled')
+      } else if (MOUNTED.has(record.status)) this.#reload(record)
+      else {
+        if (record.status === 'loading') this.restart(record)
+        else if (record.status === 'failed') this.#setStatus(record, 'waiting')
+        this.update(record)
       }
-      if (rec.status === 'loading') this.restart(rec)
-      else if (rec.status === 'failed') this.#status(rec, 'waiting')
-      else if (MOUNTED.has(rec.status)) {
-        const gen = rec.generation
-        void this.registry.load(name).then((effect) => {
-          if (gen !== rec.generation || !MOUNTED.has(rec.status)) return
-          if (!effect) {
-            this.fail(rec, this.#loadError(name))
-            return
-          }
-          rec.effect = effect
-          rec.values = values(this, rec)
-          this.engine.runtime?.rebuild(rec)
-        })
-        continue
-      }
-      this.update(rec)
     }
   }
 
   /** A definition arrived. Instances get attribute filters, handles and facades get their keys. */
   loaded(name: string): void {
-    for (const h of this.#handles) {
-      if (h.name !== name) continue
-      validate(this, h)
-      h.sync()
+    for (const handle of this.#handles) {
+      if (handle.name !== name) continue
+      validate(this, handle)
+      handle.sync()
     }
-    for (const rec of this.live) {
-      if (rec.name !== name) continue
-      recheck(this, rec.writes, name, rec.element)
-      rec.sync()
-      this.#watchAttrs(rec.element)
+    for (const record of this.live) {
+      if (record.name !== name) continue
+      recheck(this, record.writes, name, record.element)
+      record.sync()
+      this.#watchAttributes(record.element)
     }
   }
 
   /** Pushes changed values to the runtime as uniform writes, or as a rebuild where needed. */
-  changed(rec: InstanceRecord, keys?: Iterable<string>): void {
+  changed(record: InstanceRecord, keys?: Iterable<string>): void {
     const runtime = this.engine.runtime
-    const def = rec.effect?.['~definition']
-    if (!runtime || !def || !(MOUNTED.has(rec.status) || rec.status === 'loading')) return
+    const def = record.effect?.['~definition']
+    const active = MOUNTED.has(record.status) || record.status === 'loading'
+    if (!runtime || !def || !active) return
     const spec = def.params ?? {}
     let rebuild = false
     for (const key of keys ?? Object.keys(spec)) {
       const kind = spec[key]
       if (kind === undefined) continue
-      const value = resolve(this, rec, key) as AnyParamValue
-      if (same(value, rec.values[key])) continue
-      rec.values[key] = value
+      const value = resolve(this, record, key) as AnyParamValue
+      if (sameValue(value, record.values[key])) continue
+      record.values[key] = value
       if (rebuilds(kind) || def.rebuild?.includes(key)) rebuild = true
-      else runtime.write(rec, key, value)
+      else runtime.write(record, key, value)
     }
     if (!rebuild) return
-    if (rec.status === 'loading') this.restart(rec)
-    else runtime.rebuild(rec)
+    if (record.status === 'loading') this.restart(record)
+    else runtime.rebuild(record)
   }
 
   attributeChanged(element: Element): void {
-    for (const rec of this.of(element)) this.changed(rec)
+    for (const record of this.of(element)) this.changed(record)
   }
 
   /** Settles once the near instances among these leave waiting and loading. Never rejects. */
   ready(records: readonly InstanceRecord[]): Promise<void> {
     const { engine } = this
     // An element the observer has not reported yet may be on screen, so it counts until then.
-    const near = (r: InstanceRecord): boolean =>
-      this.eager(r) || engine.near(r.element) || !engine.reported(r.element)
-    const busy = (r: InstanceRecord): boolean =>
-      r.status === 'loading' || (r.status === 'waiting' && near(r))
-    const pending = records.filter((r) => busy(r) && this.registry.entries.has(r.name))
+    const near = (record: InstanceRecord): boolean =>
+      this.eager(record) || engine.near(record.element) || !engine.reported(record.element)
+    const busy = (record: InstanceRecord): boolean =>
+      record.status === 'loading' || (record.status === 'waiting' && near(record))
+    const pending = records.filter(
+      (record) => busy(record) && this.registry.entries.has(record.name),
+    )
     return new Promise((resolve) => {
       const offs: Off[] = []
       let done = false
@@ -922,9 +584,263 @@ export class Controller {
         })
         resolve()
       }
-      for (const r of pending) offs.push(r.state.subscribe(check))
+      for (const record of pending) offs.push(record.state.subscribe(check))
       offs.push(engine.status.subscribe(check), engine.intersections.subscribe(check))
       check()
     })
   }
+
+  #setStatus(record: InstanceRecord, status: InstanceStatus, error?: unknown): void {
+    if (error !== undefined) record.error = error
+    else if (status === 'waiting' || status === 'loading') record.error = undefined
+    if (record.status === status) return
+    const previous = record.status
+    record.status = status
+    if (status === 'disposed') this.live.delete(record)
+    else this.live.add(record)
+    const { element } = record
+    if (status === 'waiting') this.engine.watch(element, true)
+    else if (
+      previous === 'waiting' &&
+      !this.of(element).some((other) => other.status === 'waiting')
+    ) {
+      this.engine.watch(element, false)
+    }
+    if (!MOUNTED.has(status) && !this.of(element).some((other) => MOUNTED.has(other.status))) {
+      this.dom.present.delete(element)
+    }
+    record.state.value = status
+    this.app.emit('effects:status', { element, effect: record.name, status, error: record.error })
+    this.dom.sync(element)
+  }
+
+  #isOff(record: InstanceRecord): boolean {
+    return this.engine.blocked === 'off' || this.skips(record.name, record.effect)
+  }
+
+  #resume(record: InstanceRecord): void {
+    if (record.status === 'off' || record.status === 'unavailable') {
+      this.#setStatus(record, 'waiting')
+    }
+    if (record.status === 'parked') {
+      this.engine.runtime?.park(record, false, true)
+      this.#setStatus(record, 'running')
+      this.changed(record)
+    }
+    this.advance(record)
+  }
+
+  /** The record lost its sources or its element: parks a running one, disposes the rest. */
+  #drop(record: InstanceRecord, connected: boolean): void {
+    const { element } = record
+    // The element left the document. Its copy may live on as a ghost, or a burst in the overlay
+    // as an orphan, decided once for all its records.
+    if (
+      record.status === 'running' &&
+      !element.isConnected &&
+      this.engine.runtime?.handover(element)
+    ) {
+      for (const other of this.of(element)) this.dispose(other, 'handover')
+      return
+    }
+    if (record.status === 'running') {
+      this.engine.runtime?.park(record, true, connected)
+      record.parkedFrame = this.app.loop.time.frame
+      this.#setStatus(record, 'parked')
+      this.#scheduleSweep()
+    } else if (record.status !== 'parked' && record.status !== 'disposed') {
+      this.dispose(record, connected ? 'detached' : 'removed')
+    }
+  }
+
+  /** Releases what the instance holds and sets `status`, abandoning a loading attempt. */
+  #stop(record: InstanceRecord, status: InstanceStatus, reason: ReleaseReason): void {
+    const loading = record.status === 'loading'
+    if (loading) {
+      record.generation++
+      record.abort?.abort()
+    }
+    // A mount may have resolved 'running' before its continuation ran, so unmount here too.
+    if (loading || MOUNTED.has(record.status)) this.engine.runtime?.unmount(record, reason)
+    this.#setStatus(record, status)
+  }
+
+  /** Drops every source of the record. */
+  #unlink(record: InstanceRecord): void {
+    for (const handle of record.handles) handle.records.delete(record)
+    record.handles.clear()
+    record.markup = false
+  }
+
+  #fetchThenUpdate(record: InstanceRecord): void {
+    void this.engine.fetch([record.name]).then(() => {
+      if (record.status === 'waiting') this.update(record)
+    })
+  }
+
+  async #mount(record: InstanceRecord): Promise<void> {
+    const generation = ++record.generation
+    record.abort?.abort()
+    const abort = new AbortController()
+    record.abort = abort
+    this.#setStatus(record, 'loading')
+    const [effect, runtime] = await Promise.all([
+      this.registry.load(record.name),
+      this.engine.boot(),
+    ])
+    if (generation !== record.generation) return
+    if (!effect || !runtime) {
+      if (effect) this.#setStatus(record, 'waiting')
+      else this.#setStatus(record, 'failed', this.#loadErrors.get(record.name))
+      return
+    }
+    record.effect = effect
+    record.values = values(this, record)
+    record.presence = this.registry.presence(record.name)
+    this.#watchAttributes(record.element)
+    if (this.#isOff(record)) {
+      this.#stop(record, 'off', 'disabled')
+      return
+    }
+    const misfit = targetError(record, effect)
+    if (misfit) {
+      this.warn(`target:${record.name}`, misfit)
+      this.#setStatus(record, 'failed', misfit)
+      return
+    }
+    await record.settled
+    if (generation !== record.generation) return
+    record.values = values(this, record)
+    const attempt = runtime.mount(record, abort.signal).catch((error: unknown) => {
+      this.report(record, error)
+      return 'failed' as const
+    })
+    record.settled = attempt
+    const result = await attempt
+    if (generation !== record.generation || result === 'aborted') return
+    this.#setStatus(record, result)
+    if (result === 'failed') this.engine.runtime?.unmount(record, 'failed')
+  }
+
+  /** A mounted instance takes a replaced definition with a rebuild. */
+  #reload(record: InstanceRecord): void {
+    const { generation, name } = record
+    void this.registry.load(name).then((effect) => {
+      if (generation !== record.generation || !MOUNTED.has(record.status)) return
+      if (!effect) {
+        this.fail(record, this.#loadErrors.get(name))
+        return
+      }
+      record.effect = effect
+      record.values = values(this, record)
+      this.engine.runtime?.rebuild(record)
+    })
+  }
+
+  /** Params of loaded effects in both forms, the modes and `crossorigin`. */
+  #watchAttributes(element: Element): void {
+    const names = new Set<string>()
+    for (const record of this.of(element)) {
+      const def = this.registry.entries.get(record.name)?.effect?.['~definition']
+      if (!def) continue
+      for (const key of Object.keys(def.params ?? {})) {
+        names.add(`data-dio-${kebab(key)}`).add(`data-dio-${record.name}-${kebab(key)}`)
+      }
+      names.add('data-dio-load').add('data-dio-track')
+      if (def.media) names.add('crossorigin')
+    }
+    this.dom.watch(element, [...names])
+  }
+
+  #scheduleSweep(): void {
+    if (this.#sweep) return
+    // Without a frame (`frame` undefined) every parked record goes.
+    const sweep = (frame?: number): void => {
+      let pending = false
+      for (const record of [...this.live]) {
+        if (record.status !== 'parked') continue
+        if (frame === undefined || frame > record.parkedFrame) {
+          this.dispose(record, record.element.isConnected ? 'detached' : 'removed')
+        } else pending = true
+      }
+      if (pending) return
+      clearTimeout(this.#sweep?.timer)
+      this.#sweep?.system()
+      this.#sweep = undefined
+    }
+    this.#sweep = {
+      timer: setTimeout(sweep, SWEEP_TIMEOUT),
+      system: this.app.system('afterRender', (time) => sweep(time.frame), {
+        name: 'effects:sweep',
+      }),
+    }
+  }
+
+  /** The handle starts feeding the element's record. */
+  #link(element: Element, handle: HandleState): void {
+    const record = this.pair(element, handle.name)
+    if (handle.records.has(record)) return
+    handle.records.add(record)
+    record.handles.add(handle)
+    this.update(record)
+    if (record.status !== 'disposed') this.changed(record, Object.keys(handle.params))
+  }
+
+  #unlinkHandle(record: InstanceRecord, handle: HandleState): void {
+    if (!handle.records.delete(record)) return
+    record.handles.delete(handle)
+    this.changed(record, [...Object.keys(handle.params), ...handle.writes.keys()])
+    this.update(record)
+  }
+
+  #fits(handle: HandleState, element: Element): boolean {
+    const { within } = handle
+    const inside = !within || (within !== element && within.contains(element))
+    return inside && element.matches(handle.rule as string) && this.dom.inRoot(element)
+  }
+
+  /** An effect passed to `attach` takes a free name only. */
+  #claimName(name: string, effect: Effect, handle: HandleState): boolean {
+    const entry = this.registry.entries.get(name)
+    if (!entry) {
+      this.registry.set(name, effect)
+      return true
+    }
+    if (entry.effect === effect) return true
+    const taken = (): void => {
+      const message = `name "${name}" is taken by another definition; use register() to replace`
+      const error = new EffectError('EFFECT_DEFINITION', message, { effect: name })
+      this.app.report(error, targetOf(name))
+    }
+    // A lazy entry may load this very definition, so check once it has.
+    if (!entry.effect && !entry.failed && !isEffect(entry.source)) {
+      void this.registry.load(name).then((loaded) => {
+        if (loaded === effect || !handle.live) return
+        taken()
+        this.detach(handle)
+      })
+      return true
+    }
+    taken()
+    return false
+  }
+}
+
+/** Equal values, tuples compared by component. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (!Array.isArray(a) || !Array.isArray(b)) return Object.is(a, b)
+  return a.length === b.length && a.every((component, index) => component === b[index])
+}
+
+/** The definition's `on` or `media: true` excludes the element. */
+function targetError(record: InstanceRecord, effect: Effect): EffectError | undefined {
+  const def = effect['~definition']
+  const { element, name } = record
+  const on = def.on ?? (def.media === true ? MEDIA_SELECTOR : undefined)
+  // An explicit `on` does not lift `media: true`, since preparation waits for img/video events.
+  const media = def.media !== true || element.matches(MEDIA_SELECTOR)
+  if (media && (!on || element.matches(on))) return undefined
+  const target = media ? on : MEDIA_SELECTOR
+  const message = `"${name}" applies to "${target}" only`
+  return new EffectError('EFFECT_TARGET', message, { effect: name, element })
 }

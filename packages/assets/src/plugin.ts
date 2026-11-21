@@ -5,11 +5,11 @@ import {
   type Plugin,
   type PluginApp,
   signal,
-} from '@diorama/core'
-import type { RenderApi } from '@diorama/render'
+} from '@dioramajs/core'
+import type { RenderApi } from '@dioramajs/render'
 import { Cache, ESTIMATE, type Make, type Spec } from './cache'
-import { AssetError, DEV, noop } from './errors'
-import { absolute, BY_EXTENSION, extensionOf, keyOf, parseKey } from './keys'
+import { AssetError, DEV, linked, noop } from './errors'
+import { absolute, BY_EXTENSION, extensionOf, keyOf, parseKey, textureCors } from './keys'
 import { buffer, image, json } from './loaders'
 import { frugal, Preloads } from './preload'
 import { abortError, Queue } from './queue'
@@ -45,6 +45,7 @@ const isThree = (type: string): type is (typeof THREE_TYPES)[number] =>
 
 /** A lease that failed before it began, for SSR or a URL that doesn't parse. */
 function failed<T>(url: string, error: AssetError): Asset<T> {
+  linked(error)
   const ready = Promise.reject(error)
   ready.catch(noop)
   // A fresh function, since the handle carries its own key and url.
@@ -131,6 +132,9 @@ class Assets {
     app.on('app:destroy', () => {
       this.#destroying = true
     })
+    // Emitted by @dioramajs/transitions on every page change, explicit or auto.
+    const events = app as unknown as { on(name: string, fn: () => void): void }
+    events.on('page:leave', () => this.#wave.page())
     app.on('plugin:status', ({ name, status }) => {
       if (name !== 'render' || status !== 'stopping') return
       if (this.#renderer) this.#module?.forget(this.#renderer)
@@ -181,13 +185,16 @@ class Assets {
     try {
       href = absolute(url)
     } catch (cause) {
-      const error = new AssetError('ASSET_LOAD', `${url} is not a URL`, { url, cause })
+      const error = linked(new AssetError('ASSET_LOAD', `${url} is not a URL`, { url, cause }))
       if (report) this.#app.report(error, `asset:${url}`)
       return failed(url, error)
     }
     const type = options.type ?? this.#typeOf(href)
     const name = type ?? '?'
-    const crossOrigin = options.crossOrigin ?? ''
+    const crossOrigin =
+      name === 'texture'
+        ? textureCors(href, options.crossOrigin ?? '')
+        : (options.crossOrigin ?? '')
     const params = options.options ?? {}
     const spec: Spec = {
       key: keyOf(name, href, crossOrigin, params),

@@ -13,6 +13,9 @@ export function specifier(from: string, file: string): string {
 /** A specifier without its code extension, as TypeScript and bundlers resolve it. */
 export const bare = (spec: string): string => spec.replace(/\.(m?[jt]sx?)$/, '')
 
-/** `src/effects`, or `effects` in a project without src. */
-export const effectsDir = (root: string): string =>
-  existsSync(resolve(root, 'src')) ? 'src/effects' : 'effects'
+/** `src/effects`, `app/effects` in Nuxt 4 (its srcDir), or `effects` in a project without src. */
+export function effectsDir(root: string): string {
+  const nuxt = ['ts', 'js', 'mjs'].some((ext) => existsSync(resolve(root, `nuxt.config.${ext}`)))
+  if (nuxt && existsSync(resolve(root, 'app'))) return 'app/effects'
+  return existsSync(resolve(root, 'src')) ? 'src/effects' : 'effects'
+}

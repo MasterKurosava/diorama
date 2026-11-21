@@ -1,18 +1,17 @@
+import { withDocs } from '@dioramajs/core/dev'
 import type { AssetErrorCode } from './types'
 
-declare const process: { env: Record<string, string | undefined> } | undefined
-
-/** `import.meta.env.DEV` under Vite, otherwise `NODE_ENV`. */
-export const DEV: boolean =
-  (import.meta as { env?: { DEV?: boolean } }).env?.DEV ??
-  (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production')
+export { DEV } from '@dioramajs/core/dev'
 
 export const noop = (): void => {}
 
 /** Rejects `Asset.ready`. Reported as `asset:<url>`, which the kernel wraps as `REPORTED`. */
 export class AssetError extends Error {
+  /** Always `AssetError`. */
   override readonly name: 'AssetError' = 'AssetError'
+  /** Error code, the key of its page in the docs. */
   readonly code: AssetErrorCode
+  /** URL of the asset, if the error has one. */
   readonly url: string | undefined
 
   constructor(
@@ -24,6 +23,15 @@ export class AssetError extends Error {
     this.code = code
     this.url = options.url
   }
+}
+
+/**
+ * Adds the docs page to the message in development builds. Errors pass here on their way out of
+ * the plugin, so the three.js loaders don't carry it.
+ */
+export function linked<E extends AssetError>(error: E): E {
+  error.message = withDocs(error.message, error.code)
+  return error
 }
 
 export const isAbort = (error: unknown): boolean =>

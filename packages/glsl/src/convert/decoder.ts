@@ -39,11 +39,11 @@ export function decode(prepared: Prepared, report: Reporter): Ast | undefined {
     const tokenizer = decoder.tokenizer
     // The tokenizer stops silently at a character it does not know.
     if (tokenizer?.source.slice(tokenizer.position).trim()) {
-      const p = at(tokenizer.position)
+      const position = at(tokenizer.position)
       const char = tokenizer.source.slice(tokenizer.position).trim()[0]
       report.add(
         'GLSL_SYNTAX',
-        prepared.at(p.line, p.column),
+        prepared.at(position.line, position.column),
         `unexpected character \`${char}\``,
         hint,
       )
@@ -52,14 +52,21 @@ export function decode(prepared: Prepared, report: Reporter): Ast | undefined {
     return program
   } catch (error) {
     const message = String((error as Error)?.message ?? error)
-    const m = POSITION.exec(message)
+    const match = POSITION.exec(message)
     const token = decoder.tokenizer?.tokens[Math.max(0, decoder.index - 1)]
-    const p = m ? { line: Number(m[1]), column: Number(m[2]) } : at(token?.pos ?? 0)
+    const position = match
+      ? { line: Number(match[1]), column: Number(match[2]) }
+      : at(token?.pos ?? 0)
     const text = message
       .replace(POSITION, '')
       .replace(/^THREE\.GLSLDecoder:\s*/, '')
       .trim()
-    report.add('GLSL_SYNTAX', prepared.at(p.line, p.column), text || 'syntax error', hint)
+    report.add(
+      'GLSL_SYNTAX',
+      prepared.at(position.line, position.column),
+      text || 'syntax error',
+      hint,
+    )
     return undefined
   }
 }

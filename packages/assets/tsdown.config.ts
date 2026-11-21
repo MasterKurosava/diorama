@@ -8,5 +8,6 @@ export default defineConfig({
   // The declaration generator always references a .d.ts.map, so emit one
   dts: { sourcemap: true },
   sourcemap: true,
-  clean: true,
+  // A relative glob: `true` becomes an absolute one, which matches nothing under "folder (2)"
+  clean: ['dist'],
 })

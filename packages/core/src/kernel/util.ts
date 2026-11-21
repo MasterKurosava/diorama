@@ -1,5 +1,7 @@
 import type { Logger, LogLevel } from './types'
 
+const LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 }
+
 export const noop = (): void => {}
 
 export const resolved: Promise<void> = Promise.resolve()
@@ -12,43 +14,42 @@ export function isThenable(value: unknown): value is PromiseLike<unknown> {
   )
 }
 
+/** Copies `base` and overwrites it with the keys of `next` that are not `undefined`. */
 export function mergeOptions(base: object, next: object | undefined): Record<string, unknown> {
   const result: Record<string, unknown> = { ...base }
-  if (next) {
-    for (const [key, value] of Object.entries(next)) if (value !== undefined) result[key] = value
+  if (!next) return result
+  for (const [key, value] of Object.entries(next)) {
+    if (value !== undefined) result[key] = value
   }
   return result
 }
 
 export function shallowEqual(a: object, b: object): boolean {
-  const ka = Object.keys(a)
-  if (ka.length !== Object.keys(b).length) return false
-  for (const key of ka) {
-    if (!Object.is((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]))
-      return false
-  }
-  return true
+  const keys = Object.keys(a)
+  if (keys.length !== Object.keys(b).length) return false
+  const first = a as Record<string, unknown>
+  const second = b as Record<string, unknown>
+  return keys.every((key) => Object.is(first[key], second[key]))
 }
 
 export function perfNow(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now()
 }
 
-const LEVELS: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 }
-
+/** Forwards to `sink` the calls at `level` or above, after `prefix` if one is given. */
 export function createLogger(sink: Logger, level: LogLevel, prefix: string): Logger {
-  const min = LEVELS[level]
-  const at =
-    (name: keyof Logger, value: number) =>
+  const threshold = LEVELS[level]
+  const forward =
+    (method: keyof Logger) =>
     (...data: unknown[]): void => {
-      if (value < min) return
-      if (prefix) sink[name](prefix, ...data)
-      else sink[name](...data)
+      if (LEVELS[method] < threshold) return
+      if (prefix) sink[method](prefix, ...data)
+      else sink[method](...data)
     }
   return {
-    debug: at('debug', 0),
-    info: at('info', 1),
-    warn: at('warn', 2),
-    error: at('error', 3),
+    debug: forward('debug'),
+    info: forward('info'),
+    warn: forward('warn'),
+    error: forward('error'),
   }
 }

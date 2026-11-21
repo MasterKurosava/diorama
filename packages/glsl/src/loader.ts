@@ -1,13 +1,15 @@
-// @diorama/glsl/loader: webpack 5 and Turbopack loader over convert(). Node only.
+// @dioramajs/glsl/loader: webpack 5 and Turbopack loader over convert(). Node only.
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { format, GlslError } from './convert/errors'
 import { collectIncludes, sibling } from './convert/files'
 import { type ConvertOptions, convertParts, readInclude } from './convert/index'
-import { inlineEffect } from './convert/module'
+import { entryMeta, entryModule, inlineEffect } from './convert/module'
 import { VERTEX_FILE } from './effect-name'
 
+/** What an import returns: the shader, an effect, or a lazy registry entry. */
 export type LoaderMode = 'shader' | 'effect' | 'entry'
+/** Options of the webpack and Turbopack loader. */
 export interface LoaderOptions extends Omit<ConvertOptions, 'filename' | 'name' | 'include'> {
   /** Defaults to the import query, else 'shader'. `entry` needs webpack's `resourceQuery`. */
   readonly mode?: LoaderMode
@@ -15,17 +17,25 @@ export interface LoaderOptions extends Omit<ConvertOptions, 'filename' | 'name' 
 
 /** The subset of webpack's loader context we use. Turbopack implements it too. */
 export interface LoaderContext<O> {
+  /** Path of the file. */
   readonly resourcePath: string
+  /** Query of the import. */
   readonly resourceQuery: string
+  /** Loader options. */
   getOptions(): O
+  /** Makes the loader async and returns its callback. */
   async(): (error: Error | null, code?: string) => void
+  /** Watches a file. */
   addDependency(file: string): void
+  /** Reports a warning. */
   emitWarning(warning: Error): void
+  /** Returns a resolver with the bundler's rules. */
   getResolve?(options?: object): (context: string, request: string) => Promise<string>
 }
 
 const isVertex = (file: string): boolean => VERTEX_FILE.test(file)
 
+/** Webpack and Turbopack loader that turns GLSL files into TSL shaders and effects. */
 export default function dioramaGlslLoader(
   this: LoaderContext<LoaderOptions>,
   source: string,
@@ -54,8 +64,8 @@ export default function dioramaGlslLoader(
         include: (spec, from) => includes.get(`${from}\0${spec}`) ?? readInclude(spec, from),
       })
       for (const dep of result.includes) this.addDependency(dep)
-      for (const d of result.diagnostics) {
-        if (d.severity === 'warning') this.emitWarning(new Error(format(d, true)))
+      for (const diagnostic of result.diagnostics) {
+        if (diagnostic.severity === 'warning') this.emitWarning(new Error(format(diagnostic, true)))
       }
       return result
     }
@@ -72,15 +82,15 @@ export default function dioramaGlslLoader(
         ? inlineEffect({ vertex: main.parts })
         : inlineEffect({ fragment: main.parts, vertex: other?.parts })
     }
-    const params = { ...other?.shader.params, ...main.shader.params }
-    const request = JSON.stringify(`${file.replace(/\\/g, '/')}?effect`)
-    return `export default { load: () => import(${request}), params: ${JSON.stringify(params)} }\n`
+    return entryModule(`${file.replace(/\\/g, '/')}?effect`, entryMeta(main.shader, other?.shader))
   }
   run().then(
     (code) => callback(null, code),
     (error: unknown) => {
       if (error instanceof GlslError) {
-        const err = new Error(error.diagnostics.map((d) => format(d, true)).join('\n\n'))
+        const err = new Error(
+          error.diagnostics.map((diagnostic) => format(diagnostic, true)).join('\n\n'),
+        )
         err.name = 'GlslError'
         callback(err)
       } else callback(error as Error)

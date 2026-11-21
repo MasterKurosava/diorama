@@ -1,12 +1,29 @@
 {
-  "name": "@diorama/render",
-  "version": "0.0.0",
+  "name": "@dioramajs/render",
+  "version": "0.1.0",
+  "description": "WebGPU renderer with a WebGL 2 fallback for Diorama.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl",
+    "renderer"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/render"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
-      "@diorama/source": "./src/index.ts",
+      "@dioramajs/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
@@ -21,14 +38,17 @@
     "typecheck": "tsc"
   },
   "peerDependencies": {
-    "@diorama/core": "workspace:^",
+    "@dioramajs/core": "workspace:^",
     "three": "^0.187.0"
   },
   "devDependencies": {
-    "@diorama/core": "workspace:*",
+    "@dioramajs/core": "workspace:*",
     "@types/three": "^0.187.0",
     "three": "^0.187.0",
     "tsdown": "0.23.4",
     "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

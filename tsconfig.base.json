@@ -4,7 +4,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "customConditions": ["@diorama/source"],
+    "customConditions": ["@dioramajs/source"],
     "resolveJsonModule": true,
     "types": [],
 

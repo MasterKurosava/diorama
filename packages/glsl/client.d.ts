@@ -1,13 +1,13 @@
-// Types of `?shader`, `?effect` and `?entry` imports: add "@diorama/glsl/client" to tsconfig `types`.
+// Types of `?shader`, `?effect` and `?entry` imports: add "@dioramajs/glsl/client" to tsconfig `types`.
 declare module '*?shader' {
-  const shader: import('@diorama/glsl').GlslShader
+  const shader: import('@dioramajs/glsl').GlslShader
   export default shader
 }
 declare module '*?effect' {
-  const effect: import('@diorama/effects').Effect
+  const effect: import('@dioramajs/effects').Effect
   export default effect
 }
 declare module '*?entry' {
-  const entry: import('@diorama/effects').EffectEntry
+  const entry: import('@dioramajs/effects').EffectEntry
   export default entry
 }

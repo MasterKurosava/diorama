@@ -1,6 +1,6 @@
 // Runtime for converted shaders. Binds uniforms to effect inputs and params, loads textures and
 // mounts the stages on the element's surface or on a plane.
-import type { Empty, Off } from '@diorama/core'
+import type { Empty, Off } from '@dioramajs/core'
 import {
   type CheckParams,
   defineEffect,
@@ -12,7 +12,7 @@ import {
   type ParamDefault,
   type ParamSpec,
   type WidenSpec,
-} from '@diorama/effects'
+} from '@dioramajs/effects'
 import * as TSL from 'three/tsl'
 import {
   DataTexture,
@@ -26,11 +26,19 @@ import {
   TextureLoader,
 } from 'three/webgpu'
 import { isInput, similar, VECTOR_SIZES } from './names'
-import type { Binding, GlslShader, GlslType, SamplerLike, ShaderInput, ShaderScope } from './types'
+import type {
+  Binding,
+  GlslShader,
+  GlslType,
+  SamplerLike,
+  ShaderFunction,
+  ShaderInput,
+  ShaderScope,
+} from './types'
 
 // biome-ignore lint/suspicious/noExplicitAny: TSL types are per node type; this glue is generic over GLSL types
-type N = any
-type F = (...args: unknown[]) => N
+type AnyNode = any
+type NodeFunction = (...args: unknown[]) => AnyNode
 const tsl = TSL as unknown as {
   [K in
     | 'float'
@@ -45,8 +53,8 @@ const tsl = TSL as unknown as {
     | 'clamp'
     | 'select'
     | 'any'
-    | 'notEqual']: F
-} & { screenDPR: N; positionLocal: N }
+    | 'notEqual']: NodeFunction
+} & { screenDPR: AnyNode; positionLocal: AnyNode }
 const {
   float,
   int,
@@ -63,13 +71,14 @@ const {
   notEqual,
 } = tsl
 const { screenDPR, positionLocal } = tsl
-const uvNode = TSL.uv as () => N
+const uvNode = TSL.uv as () => AnyNode
 
 declare const process: { env: Record<string, string | undefined> } | undefined
 const DEV: boolean =
   (import.meta as { env?: { DEV?: boolean } }).env?.DEV ??
   (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production')
 
+/** One converted shader, or a vertex and a fragment shader. */
 export type GlslSource<P extends ParamSpec = ParamSpec> =
   | GlslShader<P>
   | { readonly vertex?: GlslShader<P>; readonly fragment?: GlslShader<P> }
@@ -77,6 +86,7 @@ export type GlslSource<P extends ParamSpec = ParamSpec> =
 /** A URL, a shared Texture (never disposed by us), or a loader whose Texture the instance owns. */
 export type TextureSource = Texture | string | ((signal: AbortSignal) => Promise<Texture>)
 
+/** Options of `glslEffect`: definition fields plus how uniforms are bound. */
 export interface GlslEffectOptions<P extends ParamSpec>
   extends Partial<Omit<EffectDefinition<P>, 'setup' | 'params' | 'name' | 'media'>> {
   /** Default: the shader's name. */
@@ -88,7 +98,7 @@ export interface GlslEffectOptions<P extends ParamSpec>
   /** Sources for `texture:` bindings. Each URL is loaded once and shared. */
   readonly textures?: { readonly [uniform: string]: TextureSource }
   /** Bodies for GLSL prototypes, written in TSL. */
-  readonly functions?: { readonly [name: string]: (...args: Node[]) => Node }
+  readonly functions?: { readonly [name: string]: ShaderFunction }
   /** Overrides the shader's colour space. */
   readonly colorSpace?: 'srgb' | 'linear'
   /**
@@ -104,6 +114,7 @@ export interface GlslEffectOptions<P extends ParamSpec>
 /** Definition fields glslEffect fills in. The rest pass through from the options. */
 type Inferred = 'name' | 'params' | 'media' | 'animate' | 'bleed' | 'setup'
 
+/** Options of `applyShader` and `shaderNode`. */
 export type ApplyOptions = Pick<
   GlslEffectOptions<ParamSpec>,
   'uniforms' | 'textures' | 'functions' | 'colorSpace'
@@ -143,15 +154,15 @@ function acquire(url: string): Held {
       refs: 0,
       texture: undefined,
       promise: textureLoader.load(url).then(
-        (tex) => {
+        (map) => {
           // Raw values as in a ShaderMaterial, so data maps aren't decoded.
-          tex.colorSpace = NoColorSpace
-          fresh.texture = tex
+          map.colorSpace = NoColorSpace
+          fresh.texture = map
           if (fresh.refs === 0) {
-            tex.dispose()
+            map.dispose()
             if (cache.get(url) === fresh) cache.delete(url)
           }
-          return tex
+          return map
         },
         (error: unknown) => {
           if (cache.get(url) === fresh) cache.delete(url)
@@ -200,15 +211,15 @@ const transparent = (): Texture => {
 }
 
 /** GLSL expects raw values, so a shared sRGB texture is read through a NoColorSpace clone. */
-function rawView(tex: Texture, colorSpace: 'srgb' | 'linear', track: Track): Texture {
-  if (tex.colorSpace !== SRGBColorSpace || colorSpace !== 'srgb') return tex
-  const raw = tex.clone()
+function rawView(map: Texture, colorSpace: 'srgb' | 'linear', track: Track): Texture {
+  if (map.colorSpace !== SRGBColorSpace || colorSpace !== 'srgb') return map
+  const raw = map.clone()
   raw.colorSpace = NoColorSpace
   track(() => raw.dispose())
   return raw
 }
 
-const report = (ctx: Ctx, error: unknown, what: string): void => {
+const report = (ctx: Context, error: unknown, what: string): void => {
   if (ctx.signal.aborted) return
   ctx.app.report(
     error instanceof EffectError
@@ -224,16 +235,16 @@ const report = (ctx: Ctx, error: unknown, what: string): void => {
 
 /** Returns a node right away since shaderNode is sync. URLs and loaders fill it in later. */
 function lateTexture(
-  ctx: Ctx,
+  ctx: Context,
   source: TextureSource | undefined,
   colorSpace: 'srgb' | 'linear',
 ): Node {
   if (source === undefined || source === '') return texture(transparent())
   if (typeof source === 'object') return texture(rawView(source, colorSpace, ctx.onDispose))
   const node = texture(transparent()) as Node & { value: Texture }
-  const done = (tex: Texture): void => {
+  const done = (map: Texture): void => {
     if (ctx.signal.aborted) return
-    node.value = tex
+    node.value = map
     ctx.invalidate()
   }
   if (typeof source === 'string') {
@@ -242,9 +253,9 @@ function lateTexture(
     held.promise.then(done, (error: unknown) => report(ctx, error, `texture ${source}`))
   } else {
     source(ctx.signal).then(
-      (tex) => {
-        ctx.onDispose(() => tex.dispose())
-        done(tex)
+      (map) => {
+        ctx.onDispose(() => map.dispose())
+        done(map)
       },
       (error: unknown) => report(ctx, error, 'a texture loader'),
     )
@@ -259,12 +270,12 @@ const edge = (at: Node): Node<'vec2'> => clamp(at, 0, 1)
 // An sRGB shader works on sRGB values, as in a ShaderMaterial. Its input is encoded and its
 // output decoded back to linear.
 const intoShader = (color: Node, srgb: boolean): Node<'vec4'> => {
-  const v = color as Node<'vec4'>
-  return srgb ? vec4(sRGBTransferOETF(v.rgb), v.a) : v
+  const rgba = color as Node<'vec4'>
+  return srgb ? vec4(sRGBTransferOETF(rgba.rgb), rgba.a) : rgba
 }
-const fromShader = (color: Node, srgb: boolean): Node => {
-  const v = color as Node<'vec4'>
-  return srgb ? vec4(sRGBTransferEOTF(v.rgb), v.a) : v
+const fromShader = (color: Node, srgb: boolean): Node<'vec4'> => {
+  const rgba = color as Node<'vec4'>
+  return srgb ? vec4(sRGBTransferEOTF(rgba.rgb), rgba.a) : rgba
 }
 
 const ZERO: Record<string, () => Node> = {
@@ -276,25 +287,31 @@ const ZERO: Record<string, () => Node> = {
   vec4: () => vec4(0),
 }
 
-type Ctx = EffectContext<ParamSpec>
-type U = Record<string, N>
-
-/** Params are floats. Cast to int, or to bool as `> 0.5`. */
-const paramValue = (node: N, type: GlslType): Node =>
-  type === 'int' ? int(node) : type === 'bool' ? (node as Node<'float'>).greaterThan(0.5) : node
+type Context = EffectContext<ParamSpec>
+type Uniforms = Record<string, AnyNode>
 
 /**
- * Node for any binding except `media`. The caller resolves textures and params because `mount`
- * awaits textures and `shaderNode` must stay sync.
+ * Params are floats: int casts, bool is `> 0.5`. A colour is a vec3 uniform whose `nodeType`
+ * is resolved only at build, so its Color value tells it apart; as a vec4 it gets alpha 1.
+ */
+function paramValue(node: AnyNode, type: GlslType): Node {
+  if (type === 'int') return int(node)
+  if (type === 'bool') return (node as Node<'float'>).greaterThan(0.5)
+  return type === 'vec4' && node.value?.isColor ? vec4(node, 1) : node
+}
+
+/**
+ * Node for any binding except `media`. The caller loads textures because `mount` awaits them
+ * and `shaderNode` must stay sync. A sampler param is the element's image URL. A param the
+ * context lacks throws, so `applyShader` and `shaderNode` fail alike.
  */
 function bindingNode<T>(
-  ctx: Ctx,
+  ctx: Context,
   shader: GlslShader,
   options: ApplyOptions,
   type: GlslType,
   bind: Binding,
   textureOf: (source: TextureSource | undefined) => T,
-  paramOf: (param: string, type: GlslType) => Node | T,
 ): Node | T {
   if (bind === 'none')
     return type === 'sampler2D' ? texture(transparent()) : (ZERO[type] as () => Node)()
@@ -303,14 +320,30 @@ function bindingNode<T>(
     const key = bind.slice(8)
     return textureOf(options.textures?.[key] ?? shader.textures[key])
   }
-  return paramOf(bind.slice(6), type)
+  const param = bind.slice(6)
+  const params = ctx.params as Record<string, unknown>
+  const node = (ctx.u as unknown as Uniforms)[param]
+  if (type === 'sampler2D' ? !(param in params) : !node) {
+    const what = param in params ? `not a ${type} param` : 'not a param'
+    throw new EffectError(
+      'EFFECT_SETUP',
+      `${shader.file}: "${param}" is ${what} of "${ctx.name}"`,
+      {
+        effect: ctx.name,
+        element: ctx.element,
+      },
+    )
+  }
+  if (type !== 'sampler2D') return paramValue(node, type)
+  const url = params[param]
+  return textureOf(typeof url === 'string' ? url : '')
 }
 
-function inputNode(ctx: Ctx, name: ShaderInput): Node {
-  const u = ctx.u as unknown as U
-  const size = u.size as U[string]
+function inputNode(ctx: Context, name: ShaderInput): Node {
+  const uniforms = ctx.u as unknown as Uniforms
+  const size = uniforms.size as Uniforms[string]
   const sizePx = (): Node => size.mul(screenDPR)
-  const pointer = u.pointer as U[string]
+  const pointer = uniforms.pointer as Uniforms[string]
   switch (name) {
     case 'pointerNdc':
       return pointer.mul(2).sub(1)
@@ -325,7 +358,7 @@ function inputNode(ctx: Ctx, name: ShaderInput): Node {
     case 'sizePx3':
       return vec3(sizePx(), 1)
     default:
-      return u[name] as Node
+      return uniforms[name] as Node
   }
 }
 
@@ -344,7 +377,7 @@ interface Bound {
 
 /** Binds the uniforms of both stages. Texture loads are awaited and abort with the instance. */
 async function bindAll(
-  ctx: Ctx,
+  ctx: Context,
   stages: { fragment?: GlslShader; vertex?: GlslShader },
   options: ApplyOptions,
   colorSpace: 'srgb' | 'linear',
@@ -354,18 +387,18 @@ async function bindAll(
   const texNode = async (uniform: string, source: TextureSource | undefined): Promise<Node> => {
     const hit = loaded.get(uniform)
     if (hit) return hit
-    let tex: Texture
-    if (source === undefined || source === '') tex = transparent()
+    let map: Texture
+    if (source === undefined || source === '') map = transparent()
     else if (typeof source === 'string') {
       const held = acquire(source)
       track(() => held.release())
-      tex = await until(held.promise, ctx.signal)
+      map = await until(held.promise, ctx.signal)
     } else if (typeof source === 'function') {
       const owned = await source(ctx.signal)
       track(() => owned.dispose())
-      tex = owned
-    } else tex = rawView(source, colorSpace, track)
-    const node: Node = texture(tex)
+      map = owned
+    } else map = rawView(source, colorSpace, track)
+    const node: Node = texture(map)
     loaded.set(uniform, node)
     return node
   }
@@ -387,23 +420,8 @@ async function bindAll(
         nodes[name] = { sample: () => vec4(0) }
         continue
       }
-      nodes[name] = await bindingNode(
-        ctx,
-        shader,
-        options,
-        info.type,
-        bind,
-        (source) => texNode(name, source),
-        (param, type) => {
-          if (type === 'sampler2D') {
-            const value = (ctx.params as Record<string, unknown>)[param]
-            return texNode(name, typeof value === 'string' ? value : '')
-          }
-          const node = (ctx.u as unknown as U)[param] as U[string]
-          return type === 'vec4' && (node as { nodeType?: string }).nodeType === 'color'
-            ? vec4(node, 1)
-            : paramValue(node, type)
-        },
+      nodes[name] = await bindingNode(ctx, shader, options, info.type, bind, (source) =>
+        texNode(name, source),
       )
     }
     return nodes
@@ -425,7 +443,7 @@ async function bindAll(
 function scopeOf(
   bound: Bound,
   stage: 'fragment' | 'vertex',
-  ctx: Ctx,
+  ctx: Context,
   options: ApplyOptions,
   at: { uv: Node; box: Node; position?: Node },
   media?: SamplerLike,
@@ -433,12 +451,12 @@ function scopeOf(
 ): ShaderScope {
   const uniforms = { ...bound[stage] }
   if (media && mediaName) uniforms[mediaName] = media
-  const sizePx = (ctx.u.size as unknown as U[string]).mul(screenDPR)
+  const sizePx = (ctx.u.size as unknown as Uniforms[string]).mul(screenDPR)
   return {
     uniforms,
     uv: at.uv as Node<'vec2'>,
     box: at.box as Node<'vec2'>,
-    fragCoord: vec4((at.box as U[string]).mul(sizePx), 0, 1) as Node<'vec4'>,
+    fragCoord: vec4((at.box as Uniforms[string]).mul(sizePx), 0, 1) as Node<'vec4'>,
     position: at.position as Node<'vec3'> | undefined,
     varyings: bound.varyings,
     functions: options.functions ?? {},
@@ -446,14 +464,14 @@ function scopeOf(
 }
 
 const mediaOf = (shader: GlslShader | undefined): string | undefined =>
-  shader && Object.entries(shader.uniforms).find(([, u]) => u.bind === 'media')?.[0]
+  shader && Object.entries(shader.uniforms).find(([, info]) => info.bind === 'media')?.[0]
 
 /**
  * Mounts both stages on the surface or a plane once textures are bound. A vertex shader gets a
  * grid of at least 64 segments, or `minSegments` if larger.
  */
 async function mount(
-  ctx: Ctx,
+  ctx: Context,
   stages: { fragment?: GlslShader; vertex?: GlslShader },
   options: ApplyOptions & { readonly mode?: 'surface' | 'plane' },
   minSegments: number,
@@ -504,7 +522,7 @@ async function mount(
       )
       material.colorNode = (
         fragment.stage === 'uv' ? sample.sample(result as Node<'vec2'>) : fromShader(result, srgb)
-      ) as N
+      ) as AnyNode
     }
     if (vertex)
       material.positionNode = vertex.build(
@@ -570,6 +588,7 @@ const STRENGTH = { input: 0, hover: 1, visible: 2 } as const
 /**
  * Wraps a GLSL stage pair as an effect. Bindings, params and varyings are checked up front and
  * reported together as one `EFFECT_DEFINITION`.
+ * @throws {EffectError} `EFFECT_DEFINITION` with every problem found.
  */
 /*#__NO_SIDE_EFFECTS__*/
 export function glslEffect<S extends ParamSpec, const O extends ParamSpec = Empty>(
@@ -579,17 +598,19 @@ export function glslEffect<S extends ParamSpec, const O extends ParamSpec = Empt
     readonly params?: O
   } & CheckParams<O>,
 ): Effect<WidenSpec<MergeParams<S, O>>> {
-  const opts = (options ?? {}) as GlslEffectOptions<ParamSpec> & { readonly params?: ParamSpec }
+  const settings = (options ?? {}) as GlslEffectOptions<ParamSpec> & { readonly params?: ParamSpec }
   const stages = shadersOf(shader as GlslSource)
   const { fragment, vertex } = stages
-  const list = [fragment, vertex].filter((s): s is GlslShader => !!s)
+  const shaders = [fragment, vertex].filter((stage): stage is GlslShader => !!stage)
   const problems: string[] = []
-  const name = opts.name ?? fragment?.name ?? vertex?.name ?? 'glsl'
+  const name = settings.name ?? fragment?.name ?? vertex?.name ?? 'glsl'
 
-  for (const s of list) {
-    if (s['~glsl'] !== 1) problems.push(`"${s.file}" is not a converted GLSL module (~glsl !== 1)`)
+  // Every problem is collected and thrown together as one EFFECT_DEFINITION.
+  for (const stage of shaders) {
+    if (stage['~glsl'] !== 1)
+      problems.push(`"${stage.file}" is not a converted GLSL module (~glsl !== 1)`)
   }
-  if (!list.length) problems.push('needs a fragment or a vertex shader')
+  if (!shaders.length) problems.push('needs a fragment or a vertex shader')
   if (vertex && vertex.stage !== 'position')
     problems.push(`vertex "${vertex.file}" has stage ${vertex.stage}`)
   if (fragment && fragment.stage === 'position')
@@ -597,40 +618,42 @@ export function glslEffect<S extends ParamSpec, const O extends ParamSpec = Empt
 
   // Glue params override the shader's and must fit the GLSL type.
   const types = new Map<string, GlslType>()
-  for (const s of list) {
-    for (const u of Object.values(s.uniforms)) {
-      if (u.bind.startsWith('param:')) types.set(u.bind.slice(6), u.type)
+  for (const stage of shaders) {
+    for (const info of Object.values(stage.uniforms)) {
+      if (info.bind.startsWith('param:')) types.set(info.bind.slice(6), info.type)
     }
   }
   // `uniforms: { uProgress: 'param:reveal' }` makes `reveal` a param of that uniform's type.
-  for (const [uniform, bind] of Object.entries(opts.uniforms ?? {})) {
-    const u = list.map((s) => s.uniforms[uniform]).find(Boolean)
-    if (u && typeof bind === 'string' && bind.startsWith('param:')) types.set(bind.slice(6), u.type)
+  for (const [uniform, bind] of Object.entries(settings.uniforms ?? {})) {
+    const info = shaders.map((stage) => stage.uniforms[uniform]).find(Boolean)
+    if (info && typeof bind === 'string' && bind.startsWith('param:'))
+      types.set(bind.slice(6), info.type)
   }
   const params: Record<string, ParamDefault> = { ...vertex?.params, ...fragment?.params }
-  for (const [key, value] of Object.entries(opts.params ?? {})) {
+  for (const [key, value] of Object.entries(settings.params ?? {})) {
     const type = types.get(key)
     if (type) {
       if (!fits(value, type))
         problems.push(`param "${key}" is ${type} in GLSL; ${JSON.stringify(value)} does not fit`)
     } else {
       const near = similar(key, types.keys())
-      const hint = near.length ? ` — did you mean "${near[0]}"?` : ''
-      if (!opts.setup) problems.push(`param "${key}" is not read by the shader${hint}`)
+      const hint = near.length ? ` (did you mean "${near[0]}"?)` : ''
+      if (!settings.setup) problems.push(`param "${key}" is not read by the shader${hint}`)
       else if (hint && DEV)
         console.warn(`[diorama/glsl] "${name}": param "${key}" is only for JS${hint}`)
     }
     params[key] = value
   }
 
-  for (const [uniform, bind] of Object.entries(opts.uniforms ?? {})) {
-    if (!list.some((s) => s.uniforms[uniform])) {
+  // Binding overrides must name a uniform, and a known input or param.
+  for (const [uniform, bind] of Object.entries(settings.uniforms ?? {})) {
+    if (!shaders.some((stage) => stage.uniforms[uniform])) {
       problems.push(
         `uniforms.${uniform}: no such uniform${similar(
           uniform,
-          list.flatMap((s) => Object.keys(s.uniforms)),
+          shaders.flatMap((stage) => Object.keys(stage.uniforms)),
         )
-          .map((n) => ` (did you mean "${n}"?)`)
+          .map((suggestion) => ` (did you mean "${suggestion}"?)`)
           .join('')}`,
       )
       continue
@@ -641,71 +664,81 @@ export function glslEffect<S extends ParamSpec, const O extends ParamSpec = Empt
     if (bind.startsWith('param:') && !(bind.slice(6) in params))
       problems.push(`uniforms.${uniform}: unknown param "${bind.slice(6)}"`)
   }
-  for (const s of list) {
-    for (const [uniform, u] of Object.entries(s.uniforms)) {
+  // Textures need a source and prototypes a body.
+  for (const stage of shaders) {
+    for (const [uniform, info] of Object.entries(stage.uniforms)) {
       const bind =
-        typeof opts.uniforms?.[uniform] === 'string' ? (opts.uniforms[uniform] as string) : u.bind
+        typeof settings.uniforms?.[uniform] === 'string'
+          ? (settings.uniforms[uniform] as string)
+          : info.bind
       if (
         bind.startsWith('texture:') &&
-        !opts.textures?.[bind.slice(8)] &&
-        !s.textures[bind.slice(8)]
+        !settings.textures?.[bind.slice(8)] &&
+        !stage.textures[bind.slice(8)]
       ) {
         problems.push(
           `texture "${uniform}" has no source: pass textures.${uniform} or add // @texture ./file`,
         )
       }
     }
-    for (const fn of s.externals) {
-      if (typeof opts.functions?.[fn] !== 'function')
+    for (const fn of stage.externals) {
+      if (typeof settings.functions?.[fn] !== 'function')
         problems.push(`prototype "${fn}" needs functions.${fn}`)
     }
   }
-  for (const key of Object.keys(opts.textures ?? {})) {
-    const u = list.map((s) => s.uniforms[key]).find(Boolean)
-    if (u?.type !== 'sampler2D') problems.push(`textures.${key}: no such sampler`)
+  for (const key of Object.keys(settings.textures ?? {})) {
+    const info = shaders.map((stage) => stage.uniforms[key]).find(Boolean)
+    if (info?.type !== 'sampler2D') problems.push(`textures.${key}: no such sampler`)
   }
   // A `textures` entry turns a per-element image param into a fixed texture.
   const uniforms: Record<string, Binding | ((ctx: EffectContext<ParamSpec>) => Node)> = {
-    ...opts.uniforms,
+    ...settings.uniforms,
   }
-  for (const key of Object.keys(opts.textures ?? {})) {
-    for (const s of list) {
-      const bind = s.uniforms[key]?.bind
+  for (const key of Object.keys(settings.textures ?? {})) {
+    for (const stage of shaders) {
+      const bind = stage.uniforms[key]?.bind
       if (bind?.startsWith('param:') && !(key in uniforms)) {
         uniforms[key] = `texture:${key}`
-        if (!(bind.slice(6) in (opts.params ?? {}))) delete params[bind.slice(6)]
+        if (!(bind.slice(6) in (settings.params ?? {}))) delete params[bind.slice(6)]
       }
     }
   }
 
-  for (const v of Object.keys(fragment?.varyings ?? {})) {
-    if (!vertex?.writes.includes(v)) {
+  // Varyings the fragment reads must come from the vertex shader.
+  for (const varying of Object.keys(fragment?.varyings ?? {})) {
+    if (!vertex?.writes.includes(varying)) {
       problems.push(
-        `GLSL_VARYING: "${v}" is not written by a vertex shader — Diorama gives only uv; vNormal/vPosition would come from a vertex shader`,
+        `GLSL_VARYING: "${varying}" is not written by a vertex shader. Diorama gives only uv; vNormal and vPosition need a vertex shader`,
       )
     }
   }
   if (problems.length)
     throw new EffectError('EFFECT_DEFINITION', problems.join('; '), { effect: name })
 
-  const pragmas = list.filter((s) => s.animateFromPragma)
+  // The definition: animate is the strongest of the stages, pragmas first.
+  const pragmas = shaders.filter((stage) => stage.animateFromPragma)
   const strongest = (from: readonly GlslShader[]): GlslShader['animate'] =>
     from.reduce<GlslShader['animate']>(
-      (a, s) => (STRENGTH[s.animate] > STRENGTH[a] ? s.animate : a),
+      (best, stage) => (STRENGTH[stage.animate] > STRENGTH[best] ? stage.animate : best),
       'input',
     )
-  const animate = opts.animate ?? (pragmas.length ? strongest(pragmas) : strongest(list))
+  const animate = settings.animate ?? (pragmas.length ? strongest(pragmas) : strongest(shaders))
   const media =
-    list.some((s) => Object.values(s.uniforms).some((u) => u.bind === 'media')) ||
+    shaders.some((stage) => Object.values(stage.uniforms).some((info) => info.bind === 'media')) ||
     (!fragment && !!vertex)
-  const apply = { ...opts, uniforms }
+  const apply = { ...settings, uniforms }
   // A new definition field is a type error here until glslEffect infers or passes it.
+  // `when`, `reducedMotion` and `presence` may come from file pragmas, the fragment's first.
+  const pragma = <K extends 'when' | 'reducedMotion' | 'presence'>(key: K): GlslShader[K] =>
+    fragment?.[key] ?? vertex?.[key]
   const passed = {
-    rebuild: opts.rebuild,
-    reducedMotion: opts.reducedMotion,
-    when: opts.when,
-    on: opts.on,
-    presence: opts.presence,
+    rebuild: settings.rebuild,
+    reducedMotion: settings.reducedMotion ?? pragma('reducedMotion'),
+    when: settings.when ?? pragma('when'),
+    on: settings.on,
+    presence: settings.presence ?? pragma('presence'),
+    quality: settings.quality,
+    burst: settings.burst,
   } satisfies Record<Exclude<keyof EffectDefinition<ParamSpec>, Inferred>, unknown>
   return defineEffect({
     ...passed,
@@ -713,10 +746,10 @@ export function glslEffect<S extends ParamSpec, const O extends ParamSpec = Empt
     params,
     media,
     animate,
-    bleed: opts.bleed ?? Math.max(0, ...list.map((s) => s.bleed)),
-    async setup(ctx: Ctx) {
+    bleed: settings.bleed ?? Math.max(0, ...shaders.map((stage) => stage.bleed)),
+    async setup(ctx: Context) {
       ctx.onDispose(await mount(ctx, stages, apply, fragment?.segments ?? 1))
-      return opts.setup?.(ctx)
+      return settings.setup?.(ctx)
     },
   } as EffectDefinition<ParamSpec>) as unknown as Effect<WidenSpec<MergeParams<S, O>>>
 }
@@ -730,7 +763,7 @@ export function applyShader<P extends ParamSpec>(
   let off: Off | undefined
   let cancelled = false
   const stages = shadersOf(shader)
-  const c = ctx as unknown as Ctx
+  const c = ctx as unknown as Context
   mount(c, stages, { ...options, mode: 'surface' }, 1).then(
     (o) => {
       if (cancelled) o()
@@ -751,13 +784,14 @@ export function applyShader<P extends ParamSpec>(
 /**
  * The fragment shader as a vec4 node for a custom material. The element's image is
  * `texture(map, coverUV(uv))` times the box mask.
+ * @throws {EffectError} `EFFECT_SETUP` when a shader uniform is bound to a missing param.
  */
 export function shaderNode<P extends ParamSpec>(
   ctx: EffectContext<P>,
   shader: GlslShader,
   options: ApplyOptions & { readonly uv?: Node<'vec2'> } = {},
-): Node {
-  const c = ctx as unknown as Ctx
+): Node<'vec4'> {
+  const context = ctx as unknown as Context
   const at = options.uv ?? (uvNode() as Node<'vec2'>)
   const colorSpace = options.colorSpace ?? shader.colorSpace
   const srgb = colorSpace === 'srgb'
@@ -765,47 +799,30 @@ export function shaderNode<P extends ParamSpec>(
   for (const [name, info] of Object.entries(shader.uniforms)) {
     const override = options.uniforms?.[name]
     if (typeof override === 'function') {
-      nodes[name] = override(c)
+      nodes[name] = override(context)
       continue
     }
     const bind = override ?? info.bind
     if (bind === 'media') {
       nodes[name] = {
-        sample: (p) => {
-          const at = edge(p)
-          const t = texture(c.map, c.coverUV(at)) as unknown as Node<'vec4'>
-          const v = vec4(t.rgb, t.a.mul(c.mask(at))) as Node<'vec4'>
-          return intoShader(v, srgb)
+        sample: (coordinate) => {
+          const at = edge(coordinate)
+          const sampled = texture(context.map, context.coverUV(at)) as unknown as Node<'vec4'>
+          const rgba = vec4(sampled.rgb, sampled.a.mul(context.mask(at))) as Node<'vec4'>
+          return intoShader(rgba, srgb)
         },
       }
       continue
     }
-    nodes[name] = bindingNode(
-      c,
-      shader,
-      options,
-      info.type,
-      bind,
-      (source) => lateTexture(c, source, colorSpace),
-      (param, type) => {
-        // Per-element images are not bound here.
-        if (type === 'sampler2D') return texture(transparent())
-        const node = (c.u as unknown as U)[param]
-        if (!node)
-          throw new EffectError(
-            'EFFECT_SETUP',
-            `shaderNode: param "${param}" is not a param of "${ctx.name}"`,
-            { effect: ctx.name },
-          )
-        return paramValue(node, type)
-      },
+    nodes[name] = bindingNode(context, shader, options, info.type, bind, (source) =>
+      lateTexture(context, source, colorSpace),
     )
   }
   const bound: Bound = { fragment: nodes, vertex: {}, varyings: {} }
-  const result = shader.build(scopeOf(bound, 'fragment', c, options, { uv: at, box: at }))
+  const result = shader.build(scopeOf(bound, 'fragment', context, options, { uv: at, box: at }))
   if (shader.stage === 'uv') {
     const media = nodes[mediaOf(shader) ?? ''] as SamplerLike | undefined
-    if (!media) return vec4(0)
+    if (!media) return vec4(0) as Node<'vec4'>
     const color = media.sample(result as Node<'vec2'>)
     return fromShader(color, srgb)
   }

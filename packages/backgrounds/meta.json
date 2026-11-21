@@ -1,0 +1,1335 @@
+[
+  {
+    "name": "gradient",
+    "module": "backgrounds",
+    "package": "@dioramajs/backgrounds",
+    "import": "@dioramajs/backgrounds/gradient",
+    "builtIn": true,
+    "source": "packages/backgrounds/src/gradient.ts",
+    "category": "background",
+    "summary": "A living background of four soft color blobs or of aurora curtains, mixed in OKLab, without banding, with a light film grain.",
+    "looks": "Four soft blobs of color drift slowly over the element on looping paths that take minutes to repeat, their edges bent by noise. They lean toward the pointer and shift as the page scrolls. Colors mix in OKLab, so two colors meet through a clean middle instead of a muddy gray, and every pixel is dithered, so smooth ramps show no bands. A light film grain sits on top; set grain to 0 for a clean gradient or around 0.08 for a film look. The aurora style draws the first color as a night sky and the other three as curtains of light that wave along it, sharp at their lower edge and rising in uneven rays.",
+    "target": "an empty decorative element behind the content, such as an aria-hidden div filling a hero; its CSS background is the look without WebGL",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "mesh",
+        "values": ["mesh", "aurora"],
+        "live": false,
+        "preload": false,
+        "description": "mesh drifts four soft blobs into a wash of color, for most heroes and sections; aurora draws the first color as a dark sky with the other three as waving curtains of light, for a night or tech hero over a dark page."
+      },
+      {
+        "name": "color1",
+        "attribute": "data-dio-color1",
+        "type": "color",
+        "default": "#0b1d3a",
+        "live": true,
+        "preload": true,
+        "description": "Color of the first blob, any CSS color; with aurora, the sky."
+      },
+      {
+        "name": "color2",
+        "attribute": "data-dio-color2",
+        "type": "color",
+        "default": "#3a2b8c",
+        "live": true,
+        "preload": true,
+        "description": "Color of the second blob; with aurora, the first curtain."
+      },
+      {
+        "name": "color3",
+        "attribute": "data-dio-color3",
+        "type": "color",
+        "default": "#e35d6a",
+        "live": true,
+        "preload": true,
+        "description": "Color of the third blob; with aurora, the second curtain."
+      },
+      {
+        "name": "color4",
+        "attribute": "data-dio-color4",
+        "type": "color",
+        "default": "#f6c177",
+        "live": true,
+        "preload": true,
+        "description": "Color of the fourth blob; with aurora, the third curtain."
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 0.2,
+        "live": true,
+        "preload": true,
+        "description": "How fast the blobs travel along their paths.",
+        "range": [0, 1]
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Size of the blobs: below 1 sharper patches, above 1 softer washes.",
+        "range": [0.3, 3]
+      },
+      {
+        "name": "warp",
+        "attribute": "data-dio-warp",
+        "type": "number",
+        "default": 0.4,
+        "live": true,
+        "preload": true,
+        "description": "How much noise bends the blobs’ edges.",
+        "range": [0, 1]
+      },
+      {
+        "name": "attract",
+        "attribute": "data-dio-attract",
+        "type": "number",
+        "default": 0.15,
+        "live": true,
+        "preload": true,
+        "description": "How far the blobs lean toward the pointer while it is over the element.",
+        "range": [0, 1]
+      },
+      {
+        "name": "scroll",
+        "attribute": "data-dio-scroll",
+        "type": "number",
+        "default": 0.25,
+        "live": true,
+        "preload": true,
+        "description": "How far the blobs move along their paths while the element crosses the viewport.",
+        "range": [0, 1]
+      },
+      {
+        "name": "grain",
+        "attribute": "data-dio-grain",
+        "type": "number",
+        "default": 0.03,
+        "live": true,
+        "preload": true,
+        "description": "Strength of the film grain, one CSS pixel per grain; 0 leaves only the dithering.",
+        "range": [0, 0.2]
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 15,
+          "medium": 24
+        },
+        "description": "Most frames a second the drift draws; 0 holds it still.",
+        "range": [0, 60],
+        "step": 1
+      },
+      {
+        "name": "octaves",
+        "attribute": "data-dio-octaves",
+        "type": "number",
+        "default": 2,
+        "live": false,
+        "preload": false,
+        "caps": {
+          "low": 1
+        },
+        "description": "Layers of noise in the warp, 1 to 3.",
+        "range": [1, 3],
+        "step": 1
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Paths of the blobs and shape of the noise.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "hover", "pointer", "progress", "reducedMotion", "size"],
+    "frames": {
+      "policy": "fps",
+      "note": "Up to fps frames a second while on screen, none off screen or at fps 0; pointer and scroll draw at full rate. The grain changes with those frames and adds none."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "A still gradient: the blobs and the grain stop, and neither the pointer nor scroll moves them."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page transition."
+    },
+    "touch": "The blobs lean toward a finger while it is on the screen; scrolling works as usual.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 15 frames a second, one layer of noise in the warp.",
+        "medium": "At most 24 frames a second."
+      }
+    },
+    "cost": {
+      "gpu": "One pass over the element: one to three reads of a small noise tile, four exponentials and a hash per pixel.",
+      "memory": "A 64 × 64 noise tile shared by every gradient on the page.",
+      "chunk": 2378
+    },
+    "examples": [
+      {
+        "title": "Behind a hero",
+        "html": "<header class=\"hero\"><div class=\"hero-bg\" aria-hidden=\"true\" data-dio=\"gradient\" data-dio-color1=\"#0b1d3a\" data-dio-color2=\"#3a2b8c\" data-dio-color3=\"#e35d6a\" data-dio-color4=\"oklch(85% 0.12 80)\"></div><h1>Northern lights</h1></header>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "A first screen with film grain",
+        "html": "<section class=\"intro\"><div class=\"intro-bg\" aria-hidden=\"true\" data-dio=\"gradient\" data-dio-grain=\"0.08\" data-dio-speed=\"0.2\"></div><h1>Studio</h1></section>"
+      },
+      {
+        "title": "Calm and still for a long page",
+        "html": "<div class=\"backdrop\" aria-hidden=\"true\" data-dio=\"gradient\" data-dio-fps=\"0\" data-dio-scroll=\"0.6\" data-dio-grain=\"0\"></div>"
+      },
+      {
+        "title": "Aurora over a dark hero",
+        "html": "<header class=\"hero\"><div class=\"hero-bg\" aria-hidden=\"true\" data-dio=\"gradient\" data-dio-style=\"aurora\" data-dio-color1=\"#050b1a\" data-dio-color2=\"#2bd59a\" data-dio-color3=\"#4f7cff\" data-dio-color4=\"#b45cff\"></div><h1>Night shift</h1></header>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "From code",
+        "html": "<div class=\"bg\" aria-hidden=\"true\"></div>",
+        "ts": "app.attach('.bg', 'gradient', { color1: '#101820', color4: '#fee715', attract: 0.4 })"
+      }
+    ]
+  },
+  {
+    "name": "dots",
+    "module": "backgrounds",
+    "package": "@dioramajs/backgrounds",
+    "import": "@dioramajs/backgrounds/dots",
+    "builtIn": true,
+    "source": "packages/backgrounds/src/dots.ts",
+    "category": "background",
+    "tags": ["block"],
+    "summary": "A dot grid behind a hero or in a card that answers the pointer: dots near it grow, move aside or glow, then settle back.",
+    "looks": "An even grid of small dots, plus marks or squares, the same pattern a CSS radial-gradient background draws. Around the pointer a soft lens forms: marks grow and take the accent color, slide away from it, or light up with a halo, depending on the mode. When the pointer stops the lens settles on it, and when it leaves the grid eases back. Drift slides the whole grid slowly, and fade lets it dissolve toward the edges. The background color of the element, read when the effect starts, stays under the grid.",
+    "target": "an empty decorative element behind the content, such as an aria-hidden div filling a hero or the top of a card; a CSS dot pattern on it is the look without WebGL",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "dots",
+        "values": ["dots", "plus", "squares"],
+        "live": false,
+        "preload": false,
+        "description": "dots draws round dots; plus draws thin plus marks, four times as wide as dot; squares draws small squares."
+      },
+      {
+        "name": "mode",
+        "attribute": "data-dio-mode",
+        "type": "choice",
+        "default": "grow",
+        "values": ["grow", "push", "glow"],
+        "live": false,
+        "preload": false,
+        "description": "grow enlarges and tints marks near the pointer; push moves them aside; glow tints them with a halo."
+      },
+      {
+        "name": "gap",
+        "attribute": "data-dio-gap",
+        "type": "number",
+        "default": 24,
+        "live": true,
+        "preload": true,
+        "description": "Distance between mark centers in CSS pixels.",
+        "range": [8, 64],
+        "unit": "px"
+      },
+      {
+        "name": "dot",
+        "attribute": "data-dio-dot",
+        "type": "number",
+        "default": 2,
+        "live": true,
+        "preload": true,
+        "description": "Mark size in CSS pixels: a dot's diameter or a square's side; a plus is 4 times wider.",
+        "range": [1, 8],
+        "step": 0.5,
+        "unit": "px"
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#a3acb9",
+        "live": true,
+        "preload": true,
+        "description": "Color of the marks at rest, any CSS color."
+      },
+      {
+        "name": "accent",
+        "attribute": "data-dio-accent",
+        "type": "color",
+        "default": "#5b6cff",
+        "live": true,
+        "preload": true,
+        "description": "Color marks take under the pointer, any CSS color."
+      },
+      {
+        "name": "radius",
+        "attribute": "data-dio-radius",
+        "type": "number",
+        "default": 140,
+        "live": true,
+        "preload": true,
+        "description": "Reach of the pointer lens in CSS pixels; 0 turns the pointer off.",
+        "range": [0, 400],
+        "unit": "px"
+      },
+      {
+        "name": "strength",
+        "attribute": "data-dio-strength",
+        "type": "number",
+        "default": 0.6,
+        "live": true,
+        "preload": true,
+        "description": "Strength of the lens: how much marks grow, move or glow; 0 turns it off.",
+        "range": [0, 1]
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 0
+        },
+        "description": "Speed at which the grid slides; 0 keeps it in place.",
+        "range": [0, 40],
+        "unit": "px/s"
+      },
+      {
+        "name": "fade",
+        "attribute": "data-dio-fade",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "How far the grid fades out toward the edges, from none to the middle.",
+        "range": [0, 1]
+      }
+    ],
+    "inputs": ["delta", "height", "over", "pointer", "reducedMotion", "size", "width"],
+    "frames": {
+      "policy": "fps",
+      "note": "Frames only while the pointer moves over the grid and for about a second while the lens settles; with speed, up to 30 frames a second while on screen."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "A still grid: no slide and no lens."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page transition."
+    },
+    "touch": "No lens on touch screens, so a finger never draws frames; the slide still runs and scrolling works as usual.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "No slide: the grid moves only under the pointer."
+      }
+    },
+    "cost": {
+      "gpu": "One pass over the element with a little math per pixel; push draws the nine nearest marks per pixel.",
+      "memory": "None beyond the shared plane.",
+      "chunk": 2016
+    },
+    "examples": [
+      {
+        "title": "Behind a hero",
+        "html": "<header class=\"hero\"><div class=\"hero-dots\" aria-hidden=\"true\" data-dio=\"dots\" data-dio-fade=\"0.6\"></div><h1>Ship docs your team reads</h1></header>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "Plus marks that move aside",
+        "html": "<div class=\"grid-bg\" aria-hidden=\"true\" data-dio=\"dots\" data-dio-style=\"plus\" data-dio-mode=\"push\" data-dio-gap=\"32\" data-dio-color=\"#3a3f4b\"></div>"
+      },
+      {
+        "title": "A glowing grid that drifts",
+        "html": "<div class=\"panel-bg\" aria-hidden=\"true\" data-dio=\"dots\" data-dio-mode=\"glow\" data-dio-speed=\"8\" data-dio-accent=\"#22d3ee\"></div>"
+      },
+      {
+        "title": "From code",
+        "html": "<div class=\"bg\" aria-hidden=\"true\"></div>",
+        "ts": "app.attach('.bg', 'dots', { gap: 20, accent: '#ff5a1f', radius: 200 })"
+      }
+    ]
+  },
+  {
+    "name": "waves",
+    "module": "backgrounds",
+    "package": "@dioramajs/backgrounds",
+    "import": "@dioramajs/backgrounds/waves",
+    "builtIn": true,
+    "source": "packages/backgrounds/src/waves.ts",
+    "category": "background",
+    "tags": ["scroll"],
+    "summary": "Topographic contour lines or flowing wave lines across a hero or footer, slowly changing and shifted by scroll.",
+    "looks": "Thin lines in one color over a flat background. The contour style draws the lines of a topographic map over a relief that slowly changes shape, with every fifth line a little bolder like the index lines of a real map. The waves style draws lines that run across the element and flow sideways in soft swells, and stripes fills every other band between them. Lines keep the same width in CSS pixels wherever they run, and where they crowd together they blend into an even tone instead of flickering.",
+    "target": "an empty decorative element behind the content, such as an aria-hidden div filling a hero or a footer; its CSS background is the look without WebGL",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "contour",
+        "values": ["contour", "waves", "stripes"],
+        "live": false,
+        "preload": false,
+        "description": "contour draws the lines of a topographic map over a slowly changing relief; waves draws lines flowing across the element; stripes fills every other band between those lines."
+      },
+      {
+        "name": "lines",
+        "attribute": "data-dio-lines",
+        "type": "number",
+        "default": 16,
+        "live": true,
+        "preload": true,
+        "description": "Lines across the height of the element; more lines pack them closer.",
+        "range": [2, 60],
+        "step": 1
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#3b6a8f",
+        "live": true,
+        "preload": true,
+        "description": "Color of the lines or stripes, any CSS color."
+      },
+      {
+        "name": "background",
+        "attribute": "data-dio-background",
+        "type": "color",
+        "default": "#0c1424",
+        "live": true,
+        "preload": true,
+        "description": "Color behind the lines, any CSS color."
+      },
+      {
+        "name": "warp",
+        "attribute": "data-dio-warp",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "How far noise bends the lines; 0 draws straight parallel lines.",
+        "range": [0, 1]
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 0.3,
+        "live": true,
+        "preload": true,
+        "description": "How fast the relief and the swells change; 0 keeps their shape.",
+        "range": [0, 2]
+      },
+      {
+        "name": "thickness",
+        "attribute": "data-dio-thickness",
+        "type": "number",
+        "default": 1.2,
+        "live": true,
+        "preload": true,
+        "description": "Line width in CSS pixels; stripes ignore it.",
+        "range": [0.5, 6],
+        "step": 0.1,
+        "unit": "px"
+      },
+      {
+        "name": "scroll",
+        "attribute": "data-dio-scroll",
+        "type": "number",
+        "default": 0.3,
+        "live": true,
+        "preload": true,
+        "description": "How far the lines move while the element crosses the viewport.",
+        "range": [0, 1]
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 15,
+          "medium": 24
+        },
+        "description": "Most frames a second the motion draws; 0 holds it still.",
+        "range": [0, 60],
+        "step": 1
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Shape of the noise that bends the lines.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "progress", "reducedMotion", "size"],
+    "frames": {
+      "policy": "fps",
+      "note": "Up to fps frames a second while on screen, none off screen or at fps 0; scroll draws at full rate."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "A still frame: the lines neither change nor move with scroll."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page transition."
+    },
+    "touch": "Nothing changes on touch screens: scroll moves the lines as usual.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 15 frames a second.",
+        "medium": "At most 24 frames a second."
+      }
+    },
+    "cost": {
+      "gpu": "One pass over the element: four or eight reads of a small noise tile per pixel.",
+      "memory": "A 128 × 128 noise tile in half floats per element, 128 KB.",
+      "chunk": 2119
+    },
+    "examples": [
+      {
+        "title": "Contours behind a hero",
+        "html": "<header class=\"hero\"><div class=\"hero-bg\" aria-hidden=\"true\" data-dio=\"waves\" data-dio-color=\"#3b6a8f\" data-dio-background=\"#0c1424\"></div><h1>Trails for every season</h1></header>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "Flowing lines in a footer",
+        "html": "<footer class=\"site-footer\"><div class=\"footer-bg\" aria-hidden=\"true\" data-dio=\"waves\" data-dio-style=\"waves\" data-dio-lines=\"24\" data-dio-warp=\"0.7\"></div><p>Ledger, money for teams</p></footer>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "Bold stripes on a light page",
+        "html": "<div class=\"band\" aria-hidden=\"true\" data-dio=\"waves\" data-dio-style=\"stripes\" data-dio-lines=\"10\" data-dio-color=\"#ffd84d\" data-dio-background=\"#ffef9e\"></div>"
+      },
+      {
+        "title": "From code",
+        "html": "<div class=\"bg\" aria-hidden=\"true\"></div>",
+        "ts": "app.attach('.bg', 'waves', { lines: 20, color: '#c8b68a', background: '#f4efe4' })"
+      }
+    ]
+  },
+  {
+    "name": "stars",
+    "module": "backgrounds",
+    "package": "@dioramajs/backgrounds",
+    "import": "@dioramajs/backgrounds/stars",
+    "builtIn": true,
+    "source": "packages/backgrounds/src/stars.ts",
+    "category": "background",
+    "summary": "A night sky of twinkling stars in depth layers that lean with the pointer and the scroll, with shooting stars and a warp flight.",
+    "looks": "Hundreds of small stars over a flat sky color, most faint and a few bright, some warmer and some cooler. They twinkle, drift slowly sideways, nearer ones faster, and lean with the pointer and the scroll, so the sky has depth. A fast scroll stretches them into vertical streaks, and now and then a shooting star crosses the upper sky and fades. The warp motion flies through the field instead: stars rush out from the center and stretch into trails.",
+    "target": "an empty decorative element behind the content, such as an aria-hidden div filling a hero; its CSS background is the look without WebGL",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "motion",
+        "attribute": "data-dio-motion",
+        "type": "choice",
+        "default": "drift",
+        "values": ["drift", "warp", "still"],
+        "live": false,
+        "preload": false,
+        "description": "drift twinkles and drifts slowly; warp flies through the stars; still keeps them in place."
+      },
+      {
+        "name": "count",
+        "attribute": "data-dio-count",
+        "type": "number",
+        "default": 800,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 300,
+          "medium": 550
+        },
+        "description": "Stars over the whole element.",
+        "range": [0, 4000],
+        "step": 1
+      },
+      {
+        "name": "depth",
+        "attribute": "data-dio-depth",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "How far the stars lean with the pointer and the scroll; 0 turns parallax off.",
+        "range": [0, 1]
+      },
+      {
+        "name": "twinkle",
+        "attribute": "data-dio-twinkle",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "How deeply the stars twinkle; 0 keeps their brightness steady.",
+        "range": [0, 1]
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 0.3,
+        "live": true,
+        "preload": true,
+        "description": "How fast the stars drift, or how fast the warp flies.",
+        "range": [0, 2]
+      },
+      {
+        "name": "warp",
+        "attribute": "data-dio-warp",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "How far a fast scroll stretches the stars into streaks; 0 never stretches.",
+        "range": [0, 1]
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Size of the stars over a base of about 1 px.",
+        "range": [0.3, 4]
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ffffff",
+        "live": true,
+        "preload": true,
+        "description": "Color of the stars, any CSS color; each star tints it slightly."
+      },
+      {
+        "name": "background",
+        "attribute": "data-dio-background",
+        "type": "color",
+        "default": "#04060f",
+        "live": true,
+        "preload": true,
+        "description": "Color of the sky behind the stars, any CSS color."
+      },
+      {
+        "name": "shooting",
+        "attribute": "data-dio-shooting",
+        "type": "number",
+        "default": 4,
+        "live": true,
+        "preload": true,
+        "description": "Shooting stars a minute on average; 0 turns them off.",
+        "range": [0, 30],
+        "step": 1
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 24
+        },
+        "description": "Most frames a second the motion draws; 0 holds the stars still.",
+        "range": [0, 60],
+        "step": 1
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Positions, sizes and colors of the stars.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": [
+      "delta",
+      "hover",
+      "pointer",
+      "presence",
+      "progress",
+      "reducedMotion",
+      "size",
+      "velocity"
+    ],
+    "frames": {
+      "policy": "fps",
+      "note": "Up to fps frames a second while on screen, none off screen, at fps 0 or with the still motion; pointer and scroll draw at full rate."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "A still sky: no twinkle, drift, warp, shooting stars, parallax or streaks, and no frames."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page transition."
+    },
+    "touch": "The stars lean with a finger while it is on the screen; scroll parallax and streaks work as usual.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 300 stars and 24 frames a second.",
+        "medium": "At most 550 stars."
+      }
+    },
+    "cost": {
+      "gpu": "One pass for the sky and one instanced draw of small quads for all the stars.",
+      "memory": "Two instance buffers of 4003 entries, about 128 KB.",
+      "chunk": 2922
+    },
+    "examples": [
+      {
+        "title": "Behind a hero",
+        "html": "<header class=\"hero\"><div class=\"hero-sky\" aria-hidden=\"true\" data-dio=\"stars\"></div><h1>Launch night</h1></header>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "A warp for an event countdown",
+        "html": "<section class=\"countdown\"><div class=\"countdown-bg\" aria-hidden=\"true\" data-dio=\"stars\" data-dio-motion=\"warp\" data-dio-speed=\"0.6\" data-dio-count=\"1200\"></div><p>Doors open in 03:12:44</p></section>"
+      },
+      {
+        "title": "A calm sky with no shooting stars",
+        "html": "<div class=\"night\" aria-hidden=\"true\" data-dio=\"stars\" data-dio-shooting=\"0\" data-dio-twinkle=\"0.3\" data-dio-background=\"#0b1026\"></div>"
+      },
+      {
+        "title": "From code",
+        "html": "<div class=\"sky\" aria-hidden=\"true\"></div>",
+        "ts": "app.attach('.sky', 'stars', { count: 1500, color: '#cfe3ff', shooting: 8 })"
+      }
+    ]
+  },
+  {
+    "name": "blobs",
+    "module": "backgrounds",
+    "package": "@dioramajs/backgrounds",
+    "import": "@dioramajs/backgrounds/blobs",
+    "builtIn": true,
+    "source": "packages/backgrounds/src/blobs.ts",
+    "category": "background",
+    "summary": "Soft blobs of brand color drifting behind a hero: merging like a lava lamp, as blurred orbs or as glossy glass drops.",
+    "looks": "Up to eight round blobs in four brand colors float slowly over a flat background on looping paths, each swelling and shrinking a little on its own rhythm. In the lava style they merge where they meet and pull apart again, with soft edges and colors that blend in OKLab where two blobs join. Orbs keeps them apart as blurred discs layered over each other, the look behind frosted glass cards. Glass shades the merged shapes as glossy drops with a highlight and a bright rim, the background showing through their middle. They lean toward the pointer and move along their paths as the page scrolls. Unlike gradient, which fills the whole box with one wash of color, blobs keeps distinct shapes with the background between them.",
+    "target": "an empty decorative element behind the content, such as an aria-hidden div filling a hero; its CSS background is the look without WebGL",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "lava",
+        "values": ["lava", "orbs", "glass"],
+        "live": false,
+        "preload": false,
+        "description": "lava merges the blobs like a lava lamp, for SaaS and startup heroes; orbs draws separate blurred discs, for frosted glass cards over them; glass shades the merged shapes as glossy drops, for product and app launches."
+      },
+      {
+        "name": "count",
+        "attribute": "data-dio-count",
+        "type": "number",
+        "default": 6,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 4
+        },
+        "description": "How many blobs show, up to 8; a fraction fades the last one in; 0 leaves the background.",
+        "range": [0, 8]
+      },
+      {
+        "name": "color1",
+        "attribute": "data-dio-color1",
+        "type": "color",
+        "default": "#6d5dfc",
+        "live": true,
+        "preload": true,
+        "description": "Color of the first and fifth blobs, any CSS color."
+      },
+      {
+        "name": "color2",
+        "attribute": "data-dio-color2",
+        "type": "color",
+        "default": "#22d3ee",
+        "live": true,
+        "preload": true,
+        "description": "Color of the second and sixth blobs."
+      },
+      {
+        "name": "color3",
+        "attribute": "data-dio-color3",
+        "type": "color",
+        "default": "#f472b6",
+        "live": true,
+        "preload": true,
+        "description": "Color of the third and seventh blobs."
+      },
+      {
+        "name": "color4",
+        "attribute": "data-dio-color4",
+        "type": "color",
+        "default": "#fbbf24",
+        "live": true,
+        "preload": true,
+        "description": "Color of the fourth and eighth blobs."
+      },
+      {
+        "name": "background",
+        "attribute": "data-dio-background",
+        "type": "color",
+        "default": "#0b1026",
+        "live": true,
+        "preload": true,
+        "description": "Color between the blobs."
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Size of the blobs.",
+        "range": [0.3, 2.5]
+      },
+      {
+        "name": "softness",
+        "attribute": "data-dio-softness",
+        "type": "number",
+        "default": 0.3,
+        "live": true,
+        "preload": true,
+        "description": "How soft the edges are: 0 crisp shapes, 1 a wide blur; with orbs, the blur of each disc.",
+        "range": [0, 1]
+      },
+      {
+        "name": "warp",
+        "attribute": "data-dio-warp",
+        "type": "number",
+        "default": 0.3,
+        "live": true,
+        "preload": true,
+        "description": "How much noise wobbles the edges; 0 keeps them round.",
+        "range": [0, 1]
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 0.15,
+        "live": true,
+        "preload": true,
+        "description": "How fast the blobs travel; 0 holds them in place.",
+        "range": [0, 1]
+      },
+      {
+        "name": "attract",
+        "attribute": "data-dio-attract",
+        "type": "number",
+        "default": 0.2,
+        "live": true,
+        "preload": true,
+        "description": "How far the blobs lean toward the pointer while it is over the element; 0 ignores it.",
+        "range": [0, 1]
+      },
+      {
+        "name": "scroll",
+        "attribute": "data-dio-scroll",
+        "type": "number",
+        "default": 0.25,
+        "live": true,
+        "preload": true,
+        "description": "How far the blobs move along their paths while the element crosses the viewport.",
+        "range": [0, 1]
+      },
+      {
+        "name": "grain",
+        "attribute": "data-dio-grain",
+        "type": "number",
+        "default": 0.03,
+        "live": true,
+        "preload": true,
+        "description": "Strength of the film grain, one CSS pixel per grain; 0 leaves only the dithering.",
+        "range": [0, 0.2]
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 15,
+          "medium": 24
+        },
+        "description": "Most frames a second the drift draws; 0 holds it still.",
+        "range": [0, 60],
+        "step": 1
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Paths, sizes and rhythms of the blobs.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "hover", "pointer", "progress", "reducedMotion", "size"],
+    "frames": {
+      "policy": "fps",
+      "note": "Up to fps frames a second while on screen, none off screen or at fps 0; pointer and scroll draw at full rate."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "A still frame: the blobs and the grain stop, and neither the pointer nor scroll moves them."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page transition."
+    },
+    "touch": "The blobs lean toward a finger while it is on the screen; scrolling works as usual.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 15 frames a second and 4 blobs.",
+        "medium": "At most 24 frames a second."
+      }
+    },
+    "cost": {
+      "gpu": "One pass over the element: one read of a small noise tile and a few operations per blob and pixel.",
+      "memory": "A 64 × 64 noise tile shared with gradient.",
+      "chunk": 2686
+    },
+    "examples": [
+      {
+        "title": "Behind a SaaS hero",
+        "html": "<header class=\"hero\"><div class=\"hero-bg\" aria-hidden=\"true\" data-dio=\"blobs\" data-dio-background=\"#0b1026\"></div><h1>Ship on Friday</h1></header>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "Orbs behind frosted glass cards",
+        "html": "<section class=\"plans\"><div class=\"plans-bg\" aria-hidden=\"true\" data-dio=\"blobs\" data-dio-style=\"orbs\" data-dio-count=\"4\" data-dio-softness=\"0.6\" data-dio-background=\"#f5f3ff\" data-dio-color1=\"#a78bfa\" data-dio-color2=\"#67e8f9\" data-dio-color3=\"#f9a8d4\" data-dio-color4=\"#fde68a\"></div><h2>Plans</h2></section>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "Glass drops for a launch",
+        "html": "<div class=\"launch-bg\" aria-hidden=\"true\" data-dio=\"blobs\" data-dio-style=\"glass\" data-dio-count=\"5\" data-dio-scale=\"1.2\" data-dio-grain=\"0\"></div>"
+      },
+      {
+        "title": "From code",
+        "html": "<div class=\"bg\" aria-hidden=\"true\"></div>",
+        "ts": "app.attach('.bg', 'blobs', { color1: '#ff5a1f', color2: '#ffb800', background: '#1a0b05', attract: 0.5 })"
+      }
+    ]
+  },
+  {
+    "name": "clouds",
+    "module": "backgrounds",
+    "package": "@dioramajs/backgrounds",
+    "import": "@dioramajs/backgrounds/clouds",
+    "builtIn": true,
+    "source": "packages/backgrounds/src/clouds.ts",
+    "category": "background",
+    "tags": ["scroll"],
+    "summary": "A sky of soft layered clouds for the time of day, daylight, a sunset or a moonlit night, drifting in the wind and parting on scroll.",
+    "looks": "A sky gradient from the horizon up with up to three layers of clouds over it. Clouds shrink and thin out toward the horizon, so the sky has depth; each one is lit from the sun, bright on its sunny side, darker where it is thick and underneath, with a glowing edge where it is thin. The wind moves the layers sideways, nearer ones faster, and the scroll and the pointer shift them apart. The day style has a blue sky with white clouds and a pale sun high up, sunset an orange to violet sky with peach clouds and the sun low, night a dark blue sky with stars and clouds lit by the moon.",
+    "target": "an empty decorative element behind the content, such as an aria-hidden div filling a hero; its CSS background is the look without WebGL",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "day",
+        "values": ["day", "sunset", "night"],
+        "live": false,
+        "preload": false,
+        "description": "day, a blue sky with white clouds, for travel, airline and kids’ sites; sunset, an orange and violet sky with peach clouds, for hotels, resorts and evening events; night, a dark sky with stars and moonlit clouds, for sleep, night events and dark themes."
+      },
+      {
+        "name": "cover",
+        "attribute": "data-dio-cover",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "How much of the sky the clouds cover; 0 a clear sky, 1 overcast.",
+        "range": [0, 1]
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 0.2,
+        "live": true,
+        "preload": true,
+        "description": "Wind speed; 0 holds the clouds in place.",
+        "range": [0, 1]
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Size of the clouds.",
+        "range": [0.3, 3]
+      },
+      {
+        "name": "sun",
+        "attribute": "data-dio-sun",
+        "type": "number",
+        "default": 0.6,
+        "live": true,
+        "preload": true,
+        "description": "Brightness of the sun or the moon, its glow and the light on cloud edges; 0 hides it.",
+        "range": [0, 1]
+      },
+      {
+        "name": "depth",
+        "attribute": "data-dio-depth",
+        "type": "number",
+        "default": 0.2,
+        "live": true,
+        "preload": true,
+        "description": "How far the layers shift apart with the pointer; 0 ignores the pointer.",
+        "range": [0, 1]
+      },
+      {
+        "name": "scroll",
+        "attribute": "data-dio-scroll",
+        "type": "number",
+        "default": 0.3,
+        "live": true,
+        "preload": true,
+        "description": "How far the layers move while the element crosses the viewport, nearer ones more; 0 keeps them.",
+        "range": [0, 1]
+      },
+      {
+        "name": "layers",
+        "attribute": "data-dio-layers",
+        "type": "number",
+        "default": 3,
+        "live": false,
+        "preload": false,
+        "caps": {
+          "low": 1,
+          "medium": 2
+        },
+        "description": "Layers of clouds, 1 to 3.",
+        "range": [1, 3],
+        "step": 1
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 15,
+          "medium": 24
+        },
+        "description": "Most frames a second the wind draws; 0 holds it still.",
+        "range": [0, 60],
+        "step": 1
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Shapes of the clouds.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "hover", "pointer", "progress", "reducedMotion", "size"],
+    "frames": {
+      "policy": "fps",
+      "note": "Up to fps frames a second while on screen, none off screen or at fps 0; pointer and scroll draw at full rate."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "A still sky: no wind, and neither the pointer nor scroll moves the clouds."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page transition."
+    },
+    "touch": "The layers shift with a finger while it is on the screen; scrolling works as usual.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 15 frames a second and one layer of clouds.",
+        "medium": "At most 24 frames a second and two layers."
+      }
+    },
+    "cost": {
+      "gpu": "One pass over the element: four reads of a noise tile per layer and pixel.",
+      "memory": "A 256 × 256 noise tile, 256 KB, shared by every clouds of the same seed.",
+      "chunk": 2106
+    },
+    "examples": [
+      {
+        "title": "A travel hero",
+        "html": "<header class=\"hero\"><div class=\"hero-sky\" aria-hidden=\"true\" data-dio=\"clouds\" data-dio-cover=\"0.4\"></div><h1>Fly to Lisbon from 49 €</h1></header>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "A sunset for a resort",
+        "html": "<section class=\"stay\"><div class=\"stay-sky\" aria-hidden=\"true\" data-dio=\"clouds\" data-dio-style=\"sunset\" data-dio-cover=\"0.55\"></div><h2>Evenings on the terrace</h2></section>"
+      },
+      {
+        "title": "A night sky for a sleep app",
+        "html": "<div class=\"night-bg\" aria-hidden=\"true\" data-dio=\"clouds\" data-dio-style=\"night\" data-dio-cover=\"0.3\" data-dio-speed=\"0.1\"></div>"
+      },
+      {
+        "title": "From code",
+        "html": "<div class=\"sky\" aria-hidden=\"true\"></div>",
+        "ts": "app.attach('.sky', 'clouds', { cover: 0.7, scale: 1.4, depth: 0 })"
+      }
+    ]
+  },
+  {
+    "name": "grid",
+    "module": "backgrounds",
+    "package": "@dioramajs/backgrounds",
+    "import": "@dioramajs/backgrounds/grid",
+    "builtIn": true,
+    "source": "packages/backgrounds/src/grid.ts",
+    "category": "background",
+    "tags": ["scroll"],
+    "summary": "A grid floor in perspective running toward the viewer under a glowing horizon: neon synthwave, a blueprint or plain thin lines.",
+    "looks": "The lower part of the element is a floor of square cells seen from just above, its lines running toward the viewer and meeting at the horizon. The upper part is the sky. Neon draws bright lines with a soft halo over a dark floor, the sky warming to the accent color at the horizon and a sun with bands cut through its lower half. Blueprint draws pale lines on a blue paper color with every fifth line heavier and the sun as a drawn circle. Minimal draws thin lines that fade out toward the horizon over a flat color, with the sun as a flat disc. Lines keep their width in CSS pixels and blend into an even tone where they crowd near the horizon, so the floor never shimmers. The pointer turns the view a little and the scroll moves the floor forward.",
+    "target": "an empty decorative element behind the content, such as an aria-hidden div filling a hero; its CSS background is the look without WebGL",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "neon",
+        "values": ["neon", "blueprint", "minimal"],
+        "live": false,
+        "preload": false,
+        "description": "neon, glowing lines and a striped sun, for gaming, music events and synthwave looks; blueprint, pale lines on blue paper with heavier major lines, for engineering, hardware and developer tools; minimal, thin lines fading into a flat color, for calm tech and SaaS pages."
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ff4fd8",
+        "live": true,
+        "preload": true,
+        "description": "Color of the lines, any CSS color."
+      },
+      {
+        "name": "background",
+        "attribute": "data-dio-background",
+        "type": "color",
+        "default": "#0d0221",
+        "live": true,
+        "preload": true,
+        "description": "Color of the floor and the sky."
+      },
+      {
+        "name": "accent",
+        "attribute": "data-dio-accent",
+        "type": "color",
+        "default": "#ff8a3d",
+        "live": true,
+        "preload": true,
+        "description": "Color of the horizon glow and the sun; with minimal, of the sun only; with blueprint, of the haze."
+      },
+      {
+        "name": "cells",
+        "attribute": "data-dio-cells",
+        "type": "number",
+        "default": 14,
+        "live": true,
+        "preload": true,
+        "description": "Cells across the bottom edge: more makes a finer grid.",
+        "range": [2, 60],
+        "step": 1
+      },
+      {
+        "name": "horizon",
+        "attribute": "data-dio-horizon",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Height of the horizon from the top, as a share of the element.",
+        "range": [0.1, 0.9]
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 0.4,
+        "live": true,
+        "preload": true,
+        "description": "How fast the floor runs toward the viewer; 0 holds it.",
+        "range": [0, 2]
+      },
+      {
+        "name": "sun",
+        "attribute": "data-dio-sun",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Size of the sun on the horizon; 0 hides it.",
+        "range": [0, 1]
+      },
+      {
+        "name": "thickness",
+        "attribute": "data-dio-thickness",
+        "type": "number",
+        "default": 1.2,
+        "live": true,
+        "preload": true,
+        "description": "Width of the lines in CSS pixels.",
+        "range": [0.5, 4],
+        "unit": "px"
+      },
+      {
+        "name": "depth",
+        "attribute": "data-dio-depth",
+        "type": "number",
+        "default": 0.2,
+        "live": true,
+        "preload": true,
+        "description": "How far the view turns with the pointer; 0 ignores the pointer.",
+        "range": [0, 1]
+      },
+      {
+        "name": "scroll",
+        "attribute": "data-dio-scroll",
+        "type": "number",
+        "default": 0.3,
+        "live": true,
+        "preload": true,
+        "description": "How far the floor moves forward while the element crosses the viewport; 0 keeps it.",
+        "range": [0, 1]
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 15,
+          "medium": 24
+        },
+        "description": "Most frames a second the floor draws while it runs; 0 holds it still.",
+        "range": [0, 60],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "hover", "pointer", "progress", "reducedMotion", "size"],
+    "frames": {
+      "policy": "fps",
+      "note": "Up to fps frames a second while on screen, none off screen or at fps 0; pointer and scroll draw at full rate."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "A still floor: it does not run, and neither the pointer nor scroll moves it."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page transition."
+    },
+    "touch": "The view turns with a finger while it is on the screen; scrolling works as usual.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 15 frames a second.",
+        "medium": "At most 24 frames a second."
+      }
+    },
+    "cost": {
+      "gpu": "One pass over the element with a little math per pixel, no textures.",
+      "memory": "None beyond the shared plane.",
+      "chunk": 1937
+    },
+    "examples": [
+      {
+        "title": "A synthwave hero for a music night",
+        "html": "<header class=\"hero\"><div class=\"hero-bg\" aria-hidden=\"true\" data-dio=\"grid\"></div><h1>Neon Nights, Friday 22:00</h1></header>",
+        "ts": "start({ canvas: 'behind' })"
+      },
+      {
+        "title": "A blueprint for a hardware page",
+        "html": "<section class=\"spec\"><div class=\"spec-bg\" aria-hidden=\"true\" data-dio=\"grid\" data-dio-style=\"blueprint\" data-dio-color=\"#d6e6ff\" data-dio-background=\"#0d3b8c\" data-dio-accent=\"#9cc3ff\" data-dio-sun=\"0\" data-dio-cells=\"24\"></div><h2>Built to spec</h2></section>"
+      },
+      {
+        "title": "Calm lines for a developer tool",
+        "html": "<div class=\"bg\" aria-hidden=\"true\" data-dio=\"grid\" data-dio-style=\"minimal\" data-dio-color=\"#9aa4b2\" data-dio-background=\"#0b0d12\" data-dio-sun=\"0\" data-dio-speed=\"0.2\"></div>"
+      },
+      {
+        "title": "From code",
+        "html": "<div class=\"stage-bg\" aria-hidden=\"true\"></div>",
+        "ts": "app.attach('.stage-bg', 'grid', { color: '#22d3ee', accent: '#a855f7', horizon: 0.35 })"
+      }
+    ]
+  }
+]

@@ -1,12 +1,13 @@
-import { definePlugin, type Off, type Plugin } from '@diorama/core'
-import { acquire, DEV, type PumpOwner, pumpOf, release, wrap } from './pump'
+import { definePlugin, type LogCode, type Off, type Plugin } from '@dioramajs/core'
+import { DEV, withDocs } from '@dioramajs/core/dev'
+import { acquire, type PumpOwner, pumpOf, release, wrap } from './pump'
 import { lenisSource } from './source'
 import type { LenisApi, LenisLike, LenisPluginOptions } from './types'
 
 const defaults: Omit<Required<LenisPluginOptions>, 'lenis'> = { takeover: true, handoff: true }
 const noop = (): void => {}
 
-/** What the plugin reads from `app.gsap`, so @diorama/gsap stays optional. */
+/** What the plugin reads from `app.gsap`, so @dioramajs/gsap stays optional. */
 interface GsapLike {
   readonly scrollTrigger?: { update(): void } | undefined
 }
@@ -31,6 +32,8 @@ export const lenisPlugin: Plugin<'lenis', LenisPluginOptions, LenisApi> =
       const gsap = (): GsapLike | undefined => app.gsap as GsapLike | undefined
       let current: { readonly lenis: LenisLike; readonly off: Off } | undefined
       let unsynced = false
+      const log = (level: 'warn' | 'info', code: LogCode, message: string): void =>
+        app.log[level](withDocs(`${code}: ${message}`, code))
 
       const use = (lenis: LenisLike): Off => {
         // A destroyed app takes nothing, since no listener, source or pump would ever be undone.
@@ -54,8 +57,10 @@ export const lenisPlugin: Plugin<'lenis', LenisPluginOptions, LenisApi> =
 
         const wrapper = lenis.options.wrapper
         if (wrapper && wrapper !== window) {
-          app.log.warn(
-            'LENIS_WRAPPER: Lenis scrolls a wrapper element; anchors treat its offset as page scroll, elements outside it shift',
+          log(
+            'warn',
+            'LENIS_WRAPPER',
+            'Lenis scrolls a wrapper element; anchors treat its offset as page scroll, elements outside it shift',
           )
         }
         offs.push(
@@ -68,8 +73,8 @@ export const lenisPlugin: Plugin<'lenis', LenisPluginOptions, LenisApi> =
         offs.push(app.scroll.source(lenisSource(lenis)))
         if (options.takeover) {
           const owner: PumpOwner = {
-            warn: (code, message) => app.log.warn(`${code}: ${message}`),
-            info: (code, message) => app.log.info(`${code}: ${message}`),
+            warn: (code, message) => log('warn', code, message),
+            info: (code, message) => log('info', code, message),
             report: (error, source) => app.report(error, source),
             destroyed: off,
           }
@@ -77,7 +82,7 @@ export const lenisPlugin: Plugin<'lenis', LenisPluginOptions, LenisApi> =
           offs.push(() => release(lenis, owner, options.handoff))
           offs.push(app.setDriver(pump.driver))
           if (pump.captured && DEV) {
-            app.log.info('LENIS_AUTORAF: autoRaf taken over, Diorama advances Lenis')
+            log('info', 'LENIS_AUTORAF', 'autoRaf taken over, Diorama advances Lenis')
           }
           unsynced = false
         } else {
@@ -99,8 +104,10 @@ export const lenisPlugin: Plugin<'lenis', LenisPluginOptions, LenisApi> =
           const pump = current && pumpOf(current.lenis)
           if (!pump || unsynced || app.loop.driver === pump.driver) return
           unsynced = true
-          app.log.warn(
-            'LENIS_UNSYNCED: the driver was replaced over Lenis: Diorama frames no longer follow Lenis',
+          log(
+            'warn',
+            'LENIS_UNSYNCED',
+            'the driver was replaced over Lenis: Diorama frames no longer follow Lenis',
           )
         },
         { name: 'lenis', before: 'scroll' },

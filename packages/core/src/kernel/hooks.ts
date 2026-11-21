@@ -7,17 +7,19 @@ import { isThenable, noop } from './util'
 
 const CANCEL: Cancel = Object.freeze({ '~cancel': true, reason: undefined })
 
+/** Returned from a hook handler to stop the chain. `callHook` then returns it. */
 export function cancel(reason?: string): Cancel {
   return reason === undefined ? CANCEL : Object.freeze({ '~cancel': true, reason })
 }
 
+/** Whether a hook result is a `cancel()`. */
 export function isCancel(value: unknown): value is Cancel {
   return (
     typeof value === 'object' && value !== null && (value as Partial<Cancel>)['~cancel'] === true
   )
 }
 
-/** before/after can target the entry name or its owning plugin. */
+/** Labels of an ordered entry: `before`/`after` can target its own name or its plugin. */
 export function labelsOf(owner: Owner, name: string | undefined): string[] {
   const own = name ?? owner.label
   return owner.plugin && owner.plugin !== own ? [own, owner.plugin] : [own]
@@ -29,10 +31,12 @@ interface Handler extends Orderable {
   active: boolean
 }
 
+/** Hook handlers by name, sorted by their order options. */
 export class HookBus {
   readonly #chains = new Map<string, Handler[]>()
+  /** Bumped whenever a chain changes, so callers can cache hook results. */
   readonly #versions = new Map<string, number>()
-  #seq = 0
+  #nextSeq = 0
   readonly #report: Report
   readonly #depth: Depth
 
@@ -51,24 +55,26 @@ export class HookBus {
       before: orderRefs(options?.before),
       after: orderRefs(options?.after),
       rank: owner.rank,
-      seq: this.#seq++,
+      seq: this.#nextSeq++,
     }
     const sorted = sortOrderables([...(this.#chains.get(name) ?? []), handler])
     if (!Array.isArray(sorted)) {
-      const path = sorted.cycle.map((h) => h.labels[0]).join(' → ')
+      const path = sorted.cycle.map((entry) => entry.labels[0]).join(' → ')
       throw new DioramaError('ORDER_CYCLE', `hook "${name}": ${path}`, { plugin: owner.plugin })
     }
-    this.#set(name, sorted)
+    this.#setChain(name, sorted)
     return owner.add(() => {
       if (!handler.active) return
       handler.active = false
-      this.#set(
-        name,
-        (this.#chains.get(name) ?? []).filter((h) => h !== handler),
-      )
+      const rest = (this.#chains.get(name) ?? []).filter((other) => other !== handler)
+      this.#setChain(name, rest)
     })
   }
 
+  /**
+   * Runs a sync chain. Each handler gets the value the previous one returned. A `cancel()`
+   * stops the chain and is returned as the result. An async handler is reported and ignored.
+   */
   call(name: string, value: unknown, context: unknown): unknown {
     const chain = this.#chains.get(name)
     if (!chain) return value
@@ -83,21 +89,25 @@ export class HookBus {
     }
     this.#depth.value++
     try {
-      for (const h of chain) {
-        if (!h.active || h.owner.disposed) continue
+      for (const handler of chain) {
+        if (!handler.active || handler.owner.disposed) continue
         let result: unknown
         try {
-          result = h.fn(value, context)
-        } catch (e) {
-          this.#report(e, 'hook', h.owner, name)
+          result = handler.fn(value, context)
+        } catch (error) {
+          this.#report(error, 'hook', handler.owner, name)
           continue
         }
         if (result === undefined) continue
         if (isThenable(result)) {
           result.then(undefined, noop)
-          this.#report(new Error(`async handler in sync hook "${name}"`), 'hook', h.owner, name)
-        } else if (isCancel(result)) return result
-        else value = result
+          const error = new Error(`async handler in sync hook "${name}"`)
+          this.#report(error, 'hook', handler.owner, name)
+        } else if (isCancel(result)) {
+          return result
+        } else {
+          value = result
+        }
       }
       return value
     } finally {
@@ -105,18 +115,19 @@ export class HookBus {
     }
   }
 
+  /** Runs a chain like `call`, awaiting each handler in turn. */
   async callAsync(name: string, value: unknown, context: unknown): Promise<unknown> {
-    for (const h of this.#chains.get(name) ?? []) {
-      if (!h.active || h.owner.disposed) continue
+    for (const handler of this.#chains.get(name) ?? []) {
+      if (!handler.active || handler.owner.disposed) continue
       let result: unknown
       try {
-        result = await h.fn(value, context)
-      } catch (e) {
-        this.#report(e, 'hook', h.owner, name)
+        result = await handler.fn(value, context)
+      } catch (error) {
+        this.#report(error, 'hook', handler.owner, name)
         continue
       }
       // An owner disposed while we awaited must not affect the value.
-      if (result === undefined || h.owner.disposed) continue
+      if (result === undefined || handler.owner.disposed) continue
       if (isCancel(result)) return result
       value = result
     }
@@ -127,7 +138,7 @@ export class HookBus {
     return this.#versions.get(name) ?? 0
   }
 
-  #set(name: string, chain: Handler[]): void {
+  #setChain(name: string, chain: Handler[]): void {
     if (chain.length) this.#chains.set(name, chain)
     else this.#chains.delete(name)
     this.#versions.set(name, this.version(name) + 1)

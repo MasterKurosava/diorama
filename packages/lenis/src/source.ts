@@ -1,4 +1,4 @@
-import type { ScrollSource } from '@diorama/core'
+import type { ScrollSource } from '@dioramajs/core'
 import type { LenisLike } from './types'
 
 /** Scroll source that reads the page after Lenis wrote it. */

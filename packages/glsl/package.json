@@ -1,32 +1,51 @@
 {
-  "name": "@diorama/glsl",
-  "version": "0.0.0",
+  "name": "@dioramajs/glsl",
+  "version": "0.1.0",
+  "description": "GLSL to three.js TSL converter: Vite plugin, webpack loader and CLI.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl",
+    "glsl",
+    "shadertoy",
+    "vite-plugin"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/glsl"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
-      "@diorama/source": "./src/index.ts",
+      "@dioramajs/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
     "./entries": {
-      "@diorama/source": "./src/entries.ts",
+      "@dioramajs/source": "./src/entries.ts",
       "types": "./dist/entries.d.ts",
       "default": "./dist/entries.js"
     },
     "./convert": {
-      "@diorama/source": "./src/convert/index.ts",
+      "@dioramajs/source": "./src/convert/index.ts",
       "types": "./dist/convert.d.ts",
       "default": "./dist/convert.js"
     },
     "./vite": {
-      "@diorama/source": "./src/vite.ts",
+      "@dioramajs/source": "./src/vite.ts",
       "types": "./dist/vite.d.ts",
       "default": "./dist/vite.js"
     },
     "./loader": {
-      "@diorama/source": "./src/loader.ts",
+      "@dioramajs/source": "./src/loader.ts",
       "types": "./dist/loader.d.ts",
       "default": "./dist/loader.js"
     },
@@ -36,7 +55,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "diorama-glsl": "./bin/diorama-glsl.mjs"
+    "dioramajs-glsl": "./bin/diorama-glsl.mjs"
   },
   "files": [
     "bin",
@@ -49,8 +68,8 @@
     "typecheck": "tsc"
   },
   "peerDependencies": {
-    "@diorama/core": "workspace:^",
-    "@diorama/effects": "workspace:^",
+    "@dioramajs/core": "workspace:^",
+    "@dioramajs/effects": "workspace:^",
     "three": "^0.187.0",
     "vite": ">=6"
   },
@@ -60,13 +79,16 @@
     }
   },
   "devDependencies": {
-    "@diorama/core": "workspace:*",
-    "@diorama/effects": "workspace:*",
+    "@dioramajs/core": "workspace:*",
+    "@dioramajs/effects": "workspace:*",
     "@types/node": "26.6.6",
     "@types/three": "^0.187.0",
     "three": "^0.187.0",
     "tsdown": "0.23.4",
     "typescript": "^7.0.2",
     "vite": "8.3.5"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

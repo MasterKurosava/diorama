@@ -1,48 +1,179 @@
 {
-  "name": "diorama",
-  "version": "0.0.0",
+  "name": "dioramajs",
+  "version": "0.1.0",
+  "description": "three.js effects for plain HTML: one data-dio attribute, WebGPU with a WebGL 2 fallback, 100 ready-made effects and page transitions.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl",
+    "vite",
+    "astro",
+    "nuxt",
+    "nextjs",
+    "page-transitions"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/diorama"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
-      "@diorama/source": "./src/index.ts",
+      "@dioramajs/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
     "./generated": {
-      "@diorama/source": "./src/generated.ts",
+      "@dioramajs/source": "./src/generated.ts",
       "types": "./dist/generated.d.ts",
       "default": "./dist/generated.js"
     },
+    "./core": {
+      "@dioramajs/source": "./src/core.ts",
+      "types": "./dist/core.d.ts",
+      "default": "./dist/core.js"
+    },
+    "./effects": {
+      "@dioramajs/source": "./src/effects.ts",
+      "types": "./dist/effects.d.ts",
+      "default": "./dist/effects.js"
+    },
+    "./kit": {
+      "@dioramajs/source": "./src/kit.ts",
+      "types": "./dist/kit.d.ts",
+      "default": "./dist/kit.js"
+    },
+    "./media": {
+      "@dioramajs/source": "./src/media.ts",
+      "types": "./dist/media.d.ts",
+      "default": "./dist/media.js"
+    },
+    "./model": {
+      "@dioramajs/source": "./src/model.ts",
+      "types": "./dist/model.d.ts",
+      "default": "./dist/model.js"
+    },
+    "./model/rig": {
+      "@dioramajs/source": "./src/model-rig.ts",
+      "types": "./dist/model-rig.d.ts",
+      "default": "./dist/model-rig.js"
+    },
+    "./text": {
+      "@dioramajs/source": "./src/text.ts",
+      "types": "./dist/text.d.ts",
+      "default": "./dist/text.js"
+    },
+    "./backgrounds": {
+      "@dioramajs/source": "./src/backgrounds.ts",
+      "types": "./dist/backgrounds.d.ts",
+      "default": "./dist/backgrounds.js"
+    },
+    "./globe": {
+      "@dioramajs/source": "./src/globe.ts",
+      "types": "./dist/globe.d.ts",
+      "default": "./dist/globe.js"
+    },
+    "./audio": {
+      "@dioramajs/source": "./src/audio.ts",
+      "types": "./dist/audio.d.ts",
+      "default": "./dist/audio.js"
+    },
+    "./audio/graph": {
+      "@dioramajs/source": "./src/audio-graph.ts",
+      "types": "./dist/audio-graph.d.ts",
+      "default": "./dist/audio-graph.js"
+    },
+    "./particles": {
+      "@dioramajs/source": "./src/particles.ts",
+      "types": "./dist/particles.d.ts",
+      "default": "./dist/particles.js"
+    },
+    "./blocks": {
+      "@dioramajs/source": "./src/blocks.ts",
+      "types": "./dist/blocks.d.ts",
+      "default": "./dist/blocks.js"
+    },
+    "./data": {
+      "@dioramajs/source": "./src/data.ts",
+      "types": "./dist/data.d.ts",
+      "default": "./dist/data.js"
+    },
+    "./quality": {
+      "@dioramajs/source": "./src/quality.ts",
+      "types": "./dist/quality.d.ts",
+      "default": "./dist/quality.js"
+    },
+    "./transitions": {
+      "@dioramajs/source": "./src/transitions.ts",
+      "types": "./dist/transitions.d.ts",
+      "default": "./dist/transitions.js"
+    },
+    "./assets": {
+      "@dioramajs/source": "./src/assets.ts",
+      "types": "./dist/assets.d.ts",
+      "default": "./dist/assets.js"
+    },
+    "./gsap": {
+      "@dioramajs/source": "./src/gsap.ts",
+      "types": "./dist/gsap.d.ts",
+      "default": "./dist/gsap.js"
+    },
+    "./lenis": {
+      "@dioramajs/source": "./src/lenis.ts",
+      "types": "./dist/lenis.d.ts",
+      "default": "./dist/lenis.js"
+    },
+    "./render": {
+      "@dioramajs/source": "./src/render.ts",
+      "types": "./dist/render.d.ts",
+      "default": "./dist/render.js"
+    },
+    "./glsl": {
+      "@dioramajs/source": "./src/glsl.ts",
+      "types": "./dist/glsl.d.ts",
+      "default": "./dist/glsl.js"
+    },
     "./vite": {
-      "@diorama/source": "./src/vite.ts",
+      "@dioramajs/source": "./src/vite.ts",
       "types": "./dist/vite.d.ts",
       "default": "./dist/vite.js"
     },
     "./astro": {
-      "@diorama/source": "./src/astro.ts",
+      "@dioramajs/source": "./src/astro.ts",
       "types": "./dist/astro.d.ts",
       "default": "./dist/astro.js"
     },
+    "./astro/client": {
+      "@dioramajs/source": "./src/astro-client.ts",
+      "types": "./dist/astro-client.d.ts",
+      "default": "./dist/astro-client.js"
+    },
     "./nuxt": {
-      "@diorama/source": "./src/nuxt.ts",
+      "@dioramajs/source": "./src/nuxt.ts",
       "types": "./dist/nuxt.d.ts",
       "default": "./dist/nuxt.js"
     },
     "./next": {
-      "@diorama/source": "./src/next.ts",
+      "@dioramajs/source": "./src/next.ts",
       "types": "./dist/next.d.ts",
       "default": "./dist/next.js"
     },
     "./auto": {
-      "@diorama/source": "./src/auto.ts",
+      "@dioramajs/source": "./src/auto.ts",
       "default": "./dist/cdn/auto.js"
     },
     "./package.json": "./package.json"
   },
   "bin": {
-    "diorama": "./bin/diorama.mjs"
+    "dioramajs": "./bin/diorama.mjs"
   },
   "files": [
     "bin",
@@ -54,14 +185,24 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@diorama/assets": "workspace:^",
-    "@diorama/core": "workspace:^",
-    "@diorama/effects": "workspace:^",
-    "@diorama/gsap": "workspace:^",
-    "@diorama/lenis": "workspace:^",
-    "@diorama/media": "workspace:^",
-    "@diorama/render": "workspace:^",
-    "@diorama/transitions": "workspace:^"
+    "@dioramajs/assets": "workspace:^",
+    "@dioramajs/audio": "workspace:^",
+    "@dioramajs/backgrounds": "workspace:^",
+    "@dioramajs/blocks": "workspace:^",
+    "@dioramajs/core": "workspace:^",
+    "@dioramajs/data": "workspace:^",
+    "@dioramajs/effects": "workspace:^",
+    "@dioramajs/globe": "workspace:^",
+    "@dioramajs/glsl": "workspace:^",
+    "@dioramajs/gsap": "workspace:^",
+    "@dioramajs/lenis": "workspace:^",
+    "@dioramajs/media": "workspace:^",
+    "@dioramajs/model": "workspace:^",
+    "@dioramajs/particles": "workspace:^",
+    "@dioramajs/quality": "workspace:^",
+    "@dioramajs/render": "workspace:^",
+    "@dioramajs/text": "workspace:^",
+    "@dioramajs/transitions": "workspace:^"
   },
   "peerDependencies": {
     "three": "^0.187.0",

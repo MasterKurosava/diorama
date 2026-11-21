@@ -1,10 +1,8 @@
-import type { DriverLink, FrameDriver, FrameTick } from '@diorama/core'
+// One pump per Lenis instance, shared by every app on the page. It takes over `lenis.raf` and
+// `autoRaf`, so Lenis steps exactly once per frame, before the apps that follow its scroll.
+import type { DriverLink, FrameDriver, FrameTick, LogCode } from '@dioramajs/core'
+import { DEV } from '@dioramajs/core/dev'
 import type { LenisLike } from './types'
-
-declare const process: { env: Record<string, string | undefined> } | undefined
-export const DEV: boolean =
-  (import.meta as { env?: { DEV?: boolean } }).env?.DEV ??
-  (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production')
 
 /** Longest Lenis step while frames run back to back, ms. */
 const MAX_STEP = 100
@@ -37,8 +35,8 @@ export function wrap(lenis: LenisLike, key: Wrapped, active: (original: Fn) => F
 }
 
 export interface PumpOwner {
-  readonly warn: (code: string, message: string) => void
-  readonly info: (code: string, message: string) => void
+  readonly warn: (code: LogCode, message: string) => void
+  readonly info: (code: LogCode, message: string) => void
   readonly report: (error: unknown, source: string) => void
   /** Called after `lenis.destroy()`. The owner drops its source, listener and driver override. */
   readonly destroyed: () => void
@@ -94,7 +92,7 @@ function createPump(lenis: LenisLike, initial: FrameDriver): PumpImpl {
     else console.error(error)
   }
   const anyRequested = (): boolean => {
-    for (const l of links) if (l.requested) return true
+    for (const link of links) if (link.requested) return true
     return false
   }
   const smoothing = (): boolean => lenis.isScrolling === 'smooth'
@@ -126,11 +124,11 @@ function createPump(lenis: LenisLike, initial: FrameDriver): PumpImpl {
         }
       }
       awake = false
-      for (const l of links) {
-        if (step === undefined && !l.requested) continue
-        l.requested = false
+      for (const link of links) {
+        if (step === undefined && !link.requested) continue
+        link.requested = false
         try {
-          if (l.tick(now, step)) any = true
+          if (link.tick(now, step)) any = true
         } catch (error) {
           report(error)
         }

@@ -1,3 +1,4 @@
+import { docsUrl } from '@dioramajs/core/dev'
 import type { GlslCode, GlslDiagnostic } from '../types'
 
 const ERRORS: ReadonlySet<GlslCode> = new Set<GlslCode>([
@@ -20,6 +21,7 @@ const ERRORS: ReadonlySet<GlslCode> = new Set<GlslCode>([
   'GLSL_UNKNOWN_FUNCTION',
   'GLSL_TRANSPILER',
   'GLSL_TEXTURE',
+  'GLSL_PRAGMA',
 ])
 const INFOS: ReadonlySet<GlslCode> = new Set<GlslCode>([
   'GLSL_TOVAR',
@@ -40,6 +42,7 @@ export const severityOf = (code: GlslCode): GlslDiagnostic['severity'] =>
 
 /** Thrown when a conversion fails. Carries every error, not just the first. */
 export class GlslError extends Error {
+  /** Always `GlslError`. */
   override readonly name: 'GlslError' = 'GlslError'
   /** In source order. */
   readonly diagnostics: readonly GlslDiagnostic[]
@@ -52,11 +55,12 @@ export class GlslError extends Error {
   }
 }
 
-/** `wave.frag:12:5 error GLSL_INOUT message\n  hint` */
-export function format(d: GlslDiagnostic, withFrame = false): string {
-  let text = `${d.file}:${d.line}:${d.column} ${d.severity} ${d.code} ${d.message}`
-  if (d.hint) text += `\n  → ${d.hint}`
-  if (withFrame && d.frame) text += `\n${d.frame}`
+/** `wave.frag:12:5 error GLSL_INOUT message`, then the hint, the page of the code and the frame. */
+export function format(diagnostic: GlslDiagnostic, withFrame = false): string {
+  let text = `${diagnostic.file}:${diagnostic.line}:${diagnostic.column} ${diagnostic.severity} ${diagnostic.code} ${diagnostic.message}`
+  if (diagnostic.hint) text += `\n  → ${diagnostic.hint}`
+  text += `\n  ${docsUrl(diagnostic.code)}`
+  if (withFrame && diagnostic.frame) text += `\n${diagnostic.frame}`
   return text
 }
 
@@ -64,10 +68,11 @@ export function format(d: GlslDiagnostic, withFrame = false): string {
 export function codeFrame(lines: readonly string[], line: number, column: number): string {
   const out: string[] = []
   const width = String(Math.min(lines.length, line + 1)).length
-  for (let n = Math.max(1, line - 1); n <= Math.min(lines.length, line + 1); n++) {
-    const text = (lines[n - 1] ?? '').replace(/\t/g, '  ')
-    out.push(`${n === line ? '>' : ' '} ${String(n).padStart(width)} | ${text}`)
-    if (n === line) out.push(`  ${' '.repeat(width)} | ${' '.repeat(Math.max(0, column - 1))}^`)
+  for (let number = Math.max(1, line - 1); number <= Math.min(lines.length, line + 1); number++) {
+    const text = (lines[number - 1] ?? '').replace(/\t/g, '  ')
+    out.push(`${number === line ? '>' : ' '} ${String(number).padStart(width)} | ${text}`)
+    if (number === line)
+      out.push(`  ${' '.repeat(width)} | ${' '.repeat(Math.max(0, column - 1))}^`)
   }
   return out.join('\n')
 }
@@ -104,7 +109,7 @@ export class Reporter {
   }
 
   get errors(): GlslDiagnostic[] {
-    return this.list.filter((d) => d.severity === 'error')
+    return this.list.filter((diagnostic) => diagnostic.severity === 'error')
   }
 
   throwIfErrors(): void {
@@ -114,7 +119,7 @@ export class Reporter {
   /** For a run that has to stop. Stopping with no error reported is a converter bug. */
   failure(): GlslError {
     const errors = this.errors
-    if (!errors.length) throw new Error('@diorama/glsl: conversion stopped without an error')
+    if (!errors.length) throw new Error('@dioramajs/glsl: conversion stopped without an error')
     return new GlslError(sorted(errors))
   }
 }

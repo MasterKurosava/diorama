@@ -1,4 +1,6 @@
-import type { Off } from '@diorama/core'
+// Concurrency for asset work: request slots for the network and decode slots for parsing,
+// handed out by priority.
+import type { Off } from '@dioramajs/core'
 import type { Priority } from './types'
 
 export const RANK: Readonly<Record<Priority, number>> = { low: 0, normal: 1, high: 2 }

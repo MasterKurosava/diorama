@@ -16,6 +16,7 @@ import type {
 } from './types'
 import { mergeOptions } from './util'
 
+// Registry symbols, so plugins and presets from another copy of the package are recognized too.
 const PLUGIN = Symbol.for('diorama.plugin')
 const PRESET = Symbol.for('diorama.preset')
 
@@ -32,12 +33,14 @@ export interface Definition {
   setup(app: unknown, options: unknown): unknown
 }
 
+/** Name of a dependency given as a string or as a plugin. */
 export const refName = (ref: unknown): string | undefined => {
   if (typeof ref === 'string') return ref
   const name = (ref as { name?: unknown } | null)?.name
   return typeof name === 'string' ? name : undefined
 }
 
+/** The definition behind a plugin made by `definePlugin`, or `undefined` for anything else. */
 export const definitionOf = (value: unknown): Definition | undefined =>
   typeof value === 'function' ? (value as { [PLUGIN]?: Definition })[PLUGIN] : undefined
 
@@ -51,13 +54,14 @@ export function validateDefinition(def: Definition): string[] {
     problems.push(`name "${String(def.name)}" must be a lowerCamelCase identifier`)
   }
   if (typeof def.setup !== 'function') problems.push('setup must be a function')
-  const deps = [def.dependencies ?? [], def.optionalDependencies ?? []]
-  if (!deps.every(Array.isArray)) problems.push('dependencies must be arrays')
-  else if (deps.flat().some((d) => refName(d) === undefined)) {
+  const dependencyLists = [def.dependencies ?? [], def.optionalDependencies ?? []]
+  if (!dependencyLists.every(Array.isArray)) problems.push('dependencies must be arrays')
+  else if (dependencyLists.flat().some((ref) => refName(ref) === undefined)) {
     problems.push('dependencies must be names or plugins')
   }
-  if (def.core !== undefined && typeof def.core !== 'string')
+  if (def.core !== undefined && typeof def.core !== 'string') {
     problems.push('core must be a semver range')
+  }
   if (def.defaults !== undefined && (typeof def.defaults !== 'object' || def.defaults === null)) {
     problems.push('defaults must be an object')
   }
@@ -67,10 +71,11 @@ export function validateDefinition(def: Definition): string[] {
   return problems
 }
 
+/** A frozen plugin function carrying `options`. Calling it merges more options into a copy. */
 function makePlugin(def: Definition, options: Readonly<Record<string, unknown>>): AnyPlugin {
   const plugin = (next?: object): AnyPlugin => makePlugin(def, mergeOptions(options, next))
   const names = (list?: readonly DependencyRef[]) =>
-    Object.freeze(Array.isArray(list) ? list.map((d) => refName(d) ?? '') : [])
+    Object.freeze(Array.isArray(list) ? list.map((ref) => refName(ref) ?? '') : [])
   Object.defineProperties(plugin, {
     name: { value: def.name },
     version: { value: def.version, enumerable: true },
@@ -84,6 +89,9 @@ function makePlugin(def: Definition, options: Readonly<Record<string, unknown>>)
   return Object.freeze(plugin) as unknown as AnyPlugin
 }
 
+/**
+ * Defines a plugin. The result is a frozen function: call it with options for a configured copy.
+ */
 export function definePlugin<
   const N extends string,
   O extends object = Empty,
@@ -104,6 +112,7 @@ export function definePlugin<
   return makePlugin(definition as unknown as Definition, {}) as never
 }
 
+/** Groups plugins and other presets under one name for `createApp({ presets })`. */
 export function definePreset<
   const E extends readonly PluginEntry[] = [],
   const PS extends readonly PresetEntry[] = [],
@@ -112,12 +121,12 @@ export function definePreset<
 ): Preset<Extract<E[number], AnyPlugin> | PresetPlugins<PS[number]>> {
   return Object.freeze({
     name: definition.name,
-    plugins: copy(definition.plugins),
-    presets: copy(definition.presets),
+    plugins: frozenCopy(definition.plugins),
+    presets: frozenCopy(definition.presets),
     [PRESET]: true,
   }) as never
 }
 
 // Non-arrays pass through untouched so createApp reports them instead of definePreset throwing.
-const copy = <T>(list: readonly T[] | undefined): readonly T[] =>
+const frozenCopy = <T>(list: readonly T[] | undefined): readonly T[] =>
   Array.isArray(list) ? Object.freeze([...list]) : (list ?? [])

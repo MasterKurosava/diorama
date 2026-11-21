@@ -1,85 +1,145 @@
+// The param cascade of an instance: defaults < attach params < attributes < runtime writes.
+// Also checks written values against the param types once they are known, warning on rejects.
 import { EffectError } from './errors'
-import type { Controller, HandleState, InstanceRecord, Write } from './instances'
+import type { Controller } from './instances'
 import { camel, coerce, defaultOf, kebab, plausible } from './params'
+import type { HandleState, InstanceRecord, Write } from './ports'
 import type { AnyParamValue } from './types'
 
-/** `data-dio-<effect>-<param>`, else the short form if this effect alone owns the param. */
-function attribute(ctl: Controller, rec: InstanceRecord, key: string): string | undefined {
-  const el = rec.element
-  const k = kebab(key)
-  const addressed = el.getAttribute(`data-dio-${rec.name}-${k}`)
-  if (addressed !== null) return addressed
-  const short = el.getAttribute(`data-dio-${k}`)
-  if (short === null) return undefined
-  for (const other of ctl.of(el)) {
-    if (other === rec) continue
-    const spec = ctl.registry.spec(other.name)
-    const prefix = `${other.name}-`
-    const owned = spec && key in spec
-    const addressedElsewhere = spec && k.startsWith(prefix) && camel(k.slice(prefix.length)) in spec
-    if (owned || addressedElsewhere) {
-      const message = owned
-        ? `data-dio-${k} matches ${rec.name} and ${other.name}; use data-dio-${rec.name}-${k}`
-        : `data-dio-${k} addresses ${other.name}; use data-dio-${rec.name}-${k} for ${rec.name}`
-      ctl.warn(`short:${k}`, new EffectError('EFFECT_PARAM', message, { element: el }))
-      return undefined
-    }
-  }
-  return short
-}
-
-/** The cascade: defaults < attach < attributes < runtime writes. */
+/** The value of one param, the latest layer of the cascade that has it. */
 export function resolve(
-  ctl: Controller,
-  rec: InstanceRecord,
+  controller: Controller,
+  record: InstanceRecord,
   key: string,
 ): AnyParamValue | undefined {
-  const kind = ctl.registry.spec(rec.name)?.[key]
-  let last = rec.writes.get(key)
+  const kind = controller.registry.spec(record.name)?.[key]
+  let latestWrite = record.writes.get(key)
   let attached: unknown
-  let order = 0
-  for (const h of rec.handles) {
-    const w = h.writes.get(key)
-    if (w && (!last || w.seq > last.seq)) last = w
-    if (key in h.params && h.id > order) {
-      order = h.id
-      attached = h.params[key]
+  let newestHandle = 0
+  for (const handle of record.handles) {
+    const write = handle.writes.get(key)
+    if (write && (!latestWrite || write.sequence > latestWrite.sequence)) latestWrite = write
+    if (key in handle.params && handle.id > newestHandle) {
+      newestHandle = handle.id
+      attached = handle.params[key]
     }
   }
-  if (last) return last.value as AnyParamValue
-  const attr = attribute(ctl, rec, key)
-  if (attr !== undefined) {
+  if (latestWrite) return latestWrite.value as AnyParamValue
+  const text = attribute(controller, record, key)
+  if (text !== undefined) {
     // Without a known type, the attribute reads as a number if it can.
-    const value = coerce(kind ?? 0, attr)
+    const value = coerce(kind ?? 0, text)
     if (value !== undefined) return value
-    if (kind !== undefined) reject(ctl, rec.name, rec.element, `data-dio ${key}`, attr)
+    if (kind !== undefined) reject(controller, record.name, record.element, `data-dio ${key}`, text)
   }
   if (attached !== undefined) return attached as AnyParamValue
   return kind === undefined ? undefined : defaultOf(kind)
 }
 
-export function values(ctl: Controller, rec: InstanceRecord): Record<string, AnyParamValue> {
-  const values: Record<string, AnyParamValue> = {}
-  for (const key of Object.keys(ctl.registry.spec(rec.name) ?? {})) {
-    values[key] = resolve(ctl, rec, key) as AnyParamValue
+/** Every param of the definition, resolved. */
+export function values(
+  controller: Controller,
+  record: InstanceRecord,
+): Record<string, AnyParamValue> {
+  const resolved: Record<string, AnyParamValue> = {}
+  for (const key of Object.keys(controller.registry.spec(record.name) ?? {})) {
+    resolved[key] = resolve(controller, record, key) as AnyParamValue
   }
-  return values
+  return resolved
+}
+
+/** Stores a runtime write, or warns if it is rejected. Returns true if stored. */
+export function write(
+  controller: Controller,
+  writes: Map<string, Write>,
+  name: string,
+  key: string,
+  value: unknown,
+  element?: Element,
+): boolean {
+  const accepted = accept(controller, name, key, value)
+  if (accepted === undefined) reject(controller, name, element, key, value)
+  else writes.set(key, { value: accepted, sequence: ++controller.sequence })
+  return accepted !== undefined
+}
+
+/** Re-checks stored values once more is known. Bad ones warn and are dropped. */
+export function recheck(
+  controller: Controller,
+  writes: Map<string, Write>,
+  name: string,
+  element?: Element,
+): void {
+  for (const [key, stored] of writes) {
+    const value = accept(controller, name, key, stored.value)
+    if (value !== undefined) writes.set(key, { value, sequence: stored.sequence })
+    else {
+      writes.delete(key)
+      reject(controller, name, element, key, stored.value)
+    }
+  }
+}
+
+/** Checks a handle's params and writes against what is known of its definition. */
+export function validate(controller: Controller, handle: HandleState): void {
+  for (const [key, value] of Object.entries(handle.params)) {
+    const accepted = accept(controller, handle.name, key, value)
+    if (accepted !== undefined) handle.params[key] = accepted
+    else {
+      delete handle.params[key]
+      reject(controller, handle.name, undefined, key, value)
+    }
+  }
+  recheck(controller, handle.writes, handle.name)
+}
+
+/**
+ * `data-dio-<effect>-<param>`, else the short `data-dio-<param>` if no other effect of the
+ * element owns the param or is addressed by it.
+ */
+function attribute(
+  controller: Controller,
+  record: InstanceRecord,
+  key: string,
+): string | undefined {
+  const { element } = record
+  const param = kebab(key)
+  const addressed = element.getAttribute(`data-dio-${record.name}-${param}`)
+  if (addressed !== null) return addressed
+  const short = element.getAttribute(`data-dio-${param}`)
+  if (short === null) return undefined
+  for (const other of controller.of(element)) {
+    if (other === record) continue
+    const spec = controller.registry.spec(other.name)
+    const prefix = `${other.name}-`
+    const owned = spec && key in spec
+    const addressedElsewhere =
+      spec && param.startsWith(prefix) && camel(param.slice(prefix.length)) in spec
+    if (!owned && !addressedElsewhere) continue
+    const message = owned
+      ? `data-dio-${param} matches ${record.name} and ${other.name}; use data-dio-${record.name}-${param}`
+      : `data-dio-${param} addresses ${other.name}; use data-dio-${record.name}-${param} for ${record.name}`
+    controller.warn(`short:${param}`, new EffectError('EFFECT_PARAM', message, { element }))
+    return undefined
+  }
+  return short
 }
 
 /**
  * Converts a value once the param type is known. Before the definition loads, a plausible value
  * is kept as is. Returns undefined to reject.
  */
-function accept(ctl: Controller, name: string, key: string, value: unknown): unknown {
-  const kind = ctl.registry.spec(name)?.[key]
+function accept(controller: Controller, name: string, key: string, value: unknown): unknown {
+  const { registry } = controller
+  const kind = registry.spec(name)?.[key]
   if (kind !== undefined) return coerce(kind, value)
-  if (ctl.registry.entries.get(name)?.effect || !plausible(value)) return undefined
+  if (registry.entries.get(name)?.effect || !plausible(value)) return undefined
   const iterable = typeof value === 'object' && value !== null && Symbol.iterator in value
   return iterable ? [...(value as Iterable<unknown>)] : value
 }
 
 function reject(
-  ctl: Controller,
+  controller: Controller,
   name: string,
   element: Element | undefined,
   key: string,
@@ -87,50 +147,5 @@ function reject(
 ): void {
   const message = `"${name}" rejects ${key} = ${JSON.stringify(value)}`
   const error = new EffectError('EFFECT_PARAM', message, { effect: name, element })
-  ctl.warn(`param:${name}:${key}:${String(value)}`, error)
-}
-
-/** Stores a runtime write, or warns if it is rejected. Returns true if stored. */
-export function write(
-  ctl: Controller,
-  writes: Map<string, Write>,
-  name: string,
-  key: string,
-  value: unknown,
-  el?: Element,
-): boolean {
-  const accepted = accept(ctl, name, key, value)
-  if (accepted === undefined) reject(ctl, name, el, key, value)
-  else writes.set(key, { value: accepted, seq: ++ctl.seq })
-  return accepted !== undefined
-}
-
-/** Re-checks stored values once more is known. Bad ones warn and are dropped. */
-export function recheck(
-  ctl: Controller,
-  values: Map<string, Write>,
-  name: string,
-  el?: Element,
-): void {
-  for (const [key, w] of values) {
-    const value = accept(ctl, name, key, w.value)
-    if (value !== undefined) values.set(key, { value, seq: w.seq })
-    else {
-      values.delete(key)
-      reject(ctl, name, el, key, w.value)
-    }
-  }
-}
-
-/** Checks a handle's params and writes against what is known of its definition. */
-export function validate(ctl: Controller, h: HandleState): void {
-  for (const [key, value] of Object.entries(h.params)) {
-    const accepted = accept(ctl, h.name, key, value)
-    if (accepted !== undefined) h.params[key] = accepted
-    else {
-      delete h.params[key]
-      reject(ctl, h.name, undefined, key, value)
-    }
-  }
-  recheck(ctl, h.writes, h.name)
+  controller.warn(`param:${name}:${key}:${String(value)}`, error)
 }

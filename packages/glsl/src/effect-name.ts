@@ -1,5 +1,5 @@
 // Shader file names, shared by convert, the Vite plugin, the loader and glslEntries.
-import type { ReservedAttr } from '@diorama/effects'
+import type { ReservedAttr } from '@dioramajs/effects'
 
 /** `data-dio-*` names reserved by effects. A Record so the type forces the full list. */
 export const RESERVED_ATTRS: Readonly<Record<ReservedAttr, 0>> = {
@@ -11,6 +11,7 @@ export const RESERVED_ATTRS: Readonly<Record<ReservedAttr, 0>> = {
   progress: 0,
   vt: 0,
   transition: 0,
+  section: 0,
 }
 
 /**

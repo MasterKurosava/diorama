@@ -1,4 +1,5 @@
-import { type AppScope, isDioramaError, type Off } from '@diorama/core'
+// Derives `data-dio-state="drawn"` from frames that really drew.
+import { type AppScope, isDioramaError, type Off } from '@dioramajs/core'
 import { DEV } from '../define'
 import type { LayerImpl } from './layer'
 
@@ -71,7 +72,8 @@ export class Presenter {
     for (const layer of this.#host.layers()) {
       const running = layer.running()
       const i = layer.input
-      const sized = i.width > 0 && i.height > 0
+      // A held box (a burst flying on from a hidden element) is not the element's.
+      const sized = !layer.adrift && i.width > 0 && i.height > 0
       // A veiled copy is not drawn, whatever the frame.
       const veiled = !!layer.taken?.veil
       let state: 'live' | 'drawn' | undefined = running ? 'live' : undefined

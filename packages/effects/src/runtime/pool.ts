@@ -1,4 +1,6 @@
-import type { EffectsView } from '../instances'
+// Decoded pictures shared by the layers of one app, through the assets cache when it is there.
+// Decoding prefers the image's bytes from the HTTP cache, which Chrome decodes off the main thread.
+import type { EffectsView } from '../ports'
 
 /** The element's source changed during decode, so its loop starts over. */
 export const RETRY: unique symbol = Symbol('retry')
@@ -14,10 +16,12 @@ export interface Lease {
   release(): void
 }
 
+/** A loader for the assets cache: decodes the pixels, sized in bytes, closed on dispose. */
 type Make = (context: {
   decode<R>(work: () => Promise<R>): Promise<R>
 }) => Promise<{ value: ImageBitmap; bytes: number; dispose(): void }>
 
+/** A decode shared through the local map, with its lease count. */
 interface Shared {
   refs: number
   readonly ready: Promise<ImageBitmap>
@@ -25,8 +29,8 @@ interface Shared {
 }
 
 /** CORS mode as it appears in the key. No attribute is '' (no CORS). */
-function cors(el: Element): string {
-  const value = el.getAttribute('crossorigin')
+function corsMode(element: Element): string {
+  const value = element.getAttribute('crossorigin')
   if (value === null) return ''
   return value.toLowerCase() === 'use-credentials' ? 'use-credentials' : 'anonymous'
 }
@@ -37,9 +41,33 @@ function cors(el: Element): string {
  */
 const closer = (bitmap: ImageBitmap) => (): void => bitmap.close()
 
+const FLIP: ImageBitmapOptions = { imageOrientation: 'flipY' }
+const BYTES_PER_PIXEL = 4
+
+/**
+ * Decodes the image's bytes, or gives `undefined` when they cannot be read. Chrome decodes a
+ * Blob off the main thread, but an <img> on it: about 60 ms for 1920×1080, a stalled flight.
+ * The bytes come from the HTTP cache, where the element left them.
+ */
+export async function fromBytes(url: string, mode: string): Promise<ImageBitmap | undefined> {
+  try {
+    const target = new URL(url, location.href)
+    // A no-CORS image of another origin: opaque bytes, and pixels no texture may use anyway
+    if (!mode && target.origin !== location.origin && target.protocol !== 'data:') return
+    const response = await fetch(target, {
+      credentials: mode === 'use-credentials' ? 'include' : 'same-origin',
+      cache: 'force-cache',
+    })
+    if (!response.ok) return
+    return await createImageBitmap(await response.blob(), FLIP)
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Decoded pictures shared by the layers of one app. Pixels are shared, each layer keeps its own
- * Texture. With `@diorama/assets` they live in its cache under `image <currentSrc>[ crossOrigin]`,
+ * Texture. With `@dioramajs/assets` they live in its cache under `image <currentSrc>[ crossOrigin]`,
  * the key of its `image` loader, so a preloaded picture is a hit. Otherwise (no assets, assets
  * stopped, or another loader failed under the key) a local map holds them until the last lease.
  */
@@ -57,32 +85,20 @@ export class Pool {
     return new Set(this.#held.values()).size
   }
 
-  acquire(el: HTMLImageElement): Lease {
-    const src = el.currentSrc.split('#')[0] as string
-    const mode = cors(el)
+  /**
+   * The element's decoded pixels. `anonymous` asks for them again in CORS mode through a
+   * detached image, for an element without `crossorigin` whose pixels came back tainted.
+   */
+  acquire(image: HTMLImageElement, anonymous = false): Lease {
+    const src = withoutHash(image.currentSrc)
+    const mode = anonymous ? 'anonymous' : corsMode(image)
     const key = `image ${src}${mode ? ` ${mode}` : ''}`
-    // assets drops the loader once it ran. The result's dispose is all an entry keeps.
-    const make: Make = (context) =>
-      context.decode(async () => {
-        try {
-          await el.decode()
-        } catch (cause) {
-          throw el.currentSrc.split('#')[0] === src ? new Undecodable(src, { cause }) : RETRY
-        }
-        let value: ImageBitmap
-        try {
-          // Full resolution. three sizes an <img> texture by its layout width.
-          value = await createImageBitmap(el, { imageOrientation: 'flipY' })
-        } catch {
-          throw REFUSED
-        }
-        return { value, bytes: value.width * value.height * 4, dispose: closer(value) }
-      })
+    const make = decoder(image, src, mode, anonymous)
     const assets = this.#view.assets
     let lease: Lease = assets
       ? assets.acquire(key, make, {
           priority: 'normal',
-          weight: el.naturalWidth * el.naturalHeight * 4 || undefined,
+          weight: image.naturalWidth * image.naturalHeight * BYTES_PER_PIXEL || undefined,
         })
       : this.#shared(key, make)
     const token = {}
@@ -148,3 +164,43 @@ export class Pool {
 }
 
 const noop = (): void => {}
+
+const withoutHash = (url: string): string => url.split('#')[0] as string
+
+/**
+ * The loader of one picture: its bytes decoded off the main thread, else the element decoded
+ * (or, for `anonymous`, a detached image in CORS mode). The assets cache drops the loader once
+ * it ran; the result's dispose is all an entry keeps.
+ */
+function decoder(image: HTMLImageElement, src: string, mode: string, anonymous: boolean): Make {
+  return (context) =>
+    context.decode(async () => {
+      const decoded = await fromBytes(src, mode)
+      if (decoded) return bitmapResult(decoded)
+      let source: HTMLImageElement = image
+      try {
+        if (anonymous) {
+          source = new Image()
+          source.crossOrigin = 'anonymous'
+          source.src = src
+        }
+        await source.decode()
+      } catch (cause) {
+        throw withoutHash(image.currentSrc) === src ? new Undecodable(src, { cause }) : RETRY
+      }
+      let value: ImageBitmap
+      try {
+        // Full resolution. three sizes an <img> texture by its layout width.
+        value = await createImageBitmap(source, FLIP)
+      } catch {
+        throw REFUSED
+      }
+      return bitmapResult(value)
+    })
+}
+
+const bitmapResult = (bitmap: ImageBitmap) => ({
+  value: bitmap,
+  bytes: bitmap.width * bitmap.height * BYTES_PER_PIXEL,
+  dispose: closer(bitmap),
+})

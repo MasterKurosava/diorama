@@ -1,0 +1,401 @@
+[
+  {
+    "name": "beam",
+    "module": "blocks",
+    "package": "@dioramajs/blocks",
+    "import": "@dioramajs/blocks/beam",
+    "builtIn": true,
+    "source": "packages/blocks/src/beam.ts",
+    "category": "block",
+    "summary": "A light beam that runs around the rounded border of a feature card, an input field or a highlight box.",
+    "looks": "A bright head of the first color with a soft trail of length px that turns into the second color and fades, running clockwise along the element’s edge at speed px per second and following its border radius, with a glow around the line. The pulse motion sends two beams from the top middle both ways round to meet at the bottom, then rests; hover runs the beam only while the element is hovered or has focus inside. The element stays DOM; the light draws over its edge.",
+    "target": "any element with a box: a card, a form field wrapper, a pricing plan, a callout",
+    "bleed": 48,
+    "params": [
+      {
+        "name": "motion",
+        "attribute": "data-dio-motion",
+        "type": "choice",
+        "default": "loop",
+        "values": ["loop", "pulse", "hover"],
+        "live": false,
+        "preload": false,
+        "description": "loop runs all the time; pulse sweeps from the top now and then; hover on hover or focus."
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ffaa40",
+        "live": true,
+        "preload": true,
+        "description": "Color of the beam’s head, any CSS color."
+      },
+      {
+        "name": "color2",
+        "attribute": "data-dio-color2",
+        "type": "color",
+        "default": "#9c40ff",
+        "live": true,
+        "preload": true,
+        "description": "Color the trail turns into toward its end, any CSS color."
+      },
+      {
+        "name": "length",
+        "attribute": "data-dio-length",
+        "type": "number",
+        "default": 240,
+        "live": true,
+        "preload": true,
+        "description": "Length of the beam with its trail along the border.",
+        "range": [20, 600],
+        "unit": "px"
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 200,
+        "live": true,
+        "preload": true,
+        "description": "Speed along the border; 0 stops the beam where it is.",
+        "range": [0, 1000],
+        "unit": "px/s"
+      },
+      {
+        "name": "thickness",
+        "attribute": "data-dio-thickness",
+        "type": "number",
+        "default": 2,
+        "live": true,
+        "preload": true,
+        "description": "Thickness of the line.",
+        "range": [0.5, 8],
+        "step": 0.5,
+        "unit": "px"
+      },
+      {
+        "name": "glow",
+        "attribute": "data-dio-glow",
+        "type": "number",
+        "default": 0.8,
+        "live": true,
+        "preload": true,
+        "description": "Strength and reach of the soft light around the line; 0 draws the line alone.",
+        "range": [0, 2],
+        "step": 0.05
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 60,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 30,
+          "medium": 45
+        },
+        "description": "Most frames a second while the beam runs; 0 holds it still.",
+        "range": [0, 120],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "height", "motion", "opacity", "reducedMotion", "size", "width"],
+    "frames": {
+      "policy": "fps",
+      "note": "At most fps a second while on screen for loop and pulse; for hover only while hovered, focused or fading out, none at rest."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "Static: a faint still border in the two colors instead of the moving beam; with hover it shows while hovered or focused."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "The beam fades with the page as it leaves."
+    },
+    "touch": "A tap runs the hover beam while the finger is down; a focused field keeps it running.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 30 frames a second.",
+        "medium": "At most 45 frames a second."
+      }
+    },
+    "cost": {
+      "gpu": "One draw of a thin frame around the box; the inside of the element is never shaded.",
+      "memory": "Eight vertices.",
+      "chunk": 2397
+    },
+    "examples": [
+      {
+        "title": "A featured card with a beam running round it",
+        "html": "<article class=\"feature\" data-dio=\"beam\"><h3>Realtime sync</h3><p>Every change lands on every device in under 100 ms.</p></article>"
+      },
+      {
+        "title": "An email field that lights up while focused or hovered",
+        "html": "<label class=\"field\" data-dio=\"beam\" data-dio-motion=\"hover\" data-dio-color=\"#38bdf8\" data-dio-color2=\"#6366f1\"><input type=\"email\" placeholder=\"you@company.com\"></label>"
+      },
+      {
+        "title": "A callout that pulses every few seconds",
+        "html": "<aside class=\"callout\" data-dio=\"beam\" data-dio-motion=\"pulse\" data-dio-thickness=\"1.5\" data-dio-glow=\"1\"><p>New: export to PDF.</p></aside>"
+      }
+    ]
+  },
+  {
+    "name": "glow",
+    "module": "blocks",
+    "package": "@dioramajs/blocks",
+    "import": "@dioramajs/blocks/glow",
+    "builtIn": true,
+    "source": "packages/blocks/src/glow.ts",
+    "category": "block",
+    "summary": "A spotlight that follows the pointer over a grid of cards and lights up their borders, as on SaaS and developer tool sites.",
+    "looks": "A soft round light of radius follows the pointer with ease. Where it is near a card, the card’s border lights up in color along its rounded shape with a faint halo, and in the fill and both modes its surface glows too. The light crosses the gaps, so the neighboring cards catch its edge. It fades in as the pointer comes over the grid and out as it leaves. The cards stay as they are, the light draws over them.",
+    "target": "a grid of cards with data-dio-cards naming the cards, or a single card; the cards can hold anything",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "mode",
+        "attribute": "data-dio-mode",
+        "type": "choice",
+        "default": "border",
+        "values": ["border", "fill", "both"],
+        "live": false,
+        "preload": false,
+        "description": "border lights the outlines only, for cards with a hairline border; fill lights the surfaces only, for borderless tiles; both does both, the classic spotlight card."
+      },
+      {
+        "name": "cards",
+        "attribute": "data-dio-cards",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Selector of the cards inside, like .card; empty makes the element the card."
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ffffff",
+        "live": true,
+        "preload": true,
+        "description": "Color of the light, any CSS color."
+      },
+      {
+        "name": "radius",
+        "attribute": "data-dio-radius",
+        "type": "number",
+        "default": 320,
+        "live": true,
+        "preload": true,
+        "description": "Radius of the light around the pointer.",
+        "range": [40, 1000],
+        "unit": "px"
+      },
+      {
+        "name": "border",
+        "attribute": "data-dio-border",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Width of the lit border ring; 0 turns the ring off.",
+        "range": [0, 6],
+        "step": 0.5,
+        "unit": "px"
+      },
+      {
+        "name": "fill",
+        "attribute": "data-dio-fill",
+        "type": "number",
+        "default": 0.12,
+        "live": true,
+        "preload": true,
+        "description": "Strength of the surface glow in the fill and both modes; 0 turns it off.",
+        "range": [0, 0.6],
+        "step": 0.01
+      },
+      {
+        "name": "ease",
+        "attribute": "data-dio-ease",
+        "type": "number",
+        "default": 0.1,
+        "live": true,
+        "preload": true,
+        "description": "Time the light takes to catch up with the pointer; 0 sticks to it.",
+        "range": [0, 1],
+        "step": 0.01,
+        "unit": "s"
+      }
+    ],
+    "inputs": ["delta", "opacity", "presence", "reducedMotion"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while the pointer moves near the cards and while the light fades; none at rest."
+    },
+    "when": "hover",
+    "reducedMotion": {
+      "mode": "static",
+      "note": "Static: the light still sits under the pointer, but jumps with it and appears and goes at once, without trailing or fading."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "The light fades with the page as it leaves."
+    },
+    "touch": "Off: phones and tablets have no pointer to follow, and the cards stay as they are.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "One instanced draw for up to 64 cards, only while the light is on.",
+      "memory": "Two vec4 attributes per card, under 3 KB.",
+      "chunk": 2175
+    },
+    "examples": [
+      {
+        "title": "A feature grid: the light lights up the borders of the cards near it",
+        "html": "<div class=\"features\" data-dio=\"glow\" data-dio-cards=\".card\"><article class=\"card\"><h3>Edge functions</h3><p>Run code next to your users.</p></article><article class=\"card\"><h3>Preview deploys</h3><p>Every branch gets its own URL.</p></article><article class=\"card\"><h3>Analytics</h3><p>Real traffic, no cookies.</p></article></div>"
+      },
+      {
+        "title": "Borderless tiles that glow under the pointer",
+        "html": "<ul class=\"integrations\" data-dio=\"glow\" data-dio-cards=\"li\" data-dio-mode=\"fill\" data-dio-fill=\"0.18\"><li>GitHub</li><li>Slack</li><li>Linear</li><li>Figma</li></ul>"
+      },
+      {
+        "title": "One pricing card in the brand color, border and surface",
+        "html": "<section class=\"plan\" data-dio=\"glow\" data-dio-mode=\"both\" data-dio-color=\"#7c5cff\" data-dio-radius=\"240\"><h3>Pro</h3><p>$24 per month</p></section>"
+      }
+    ]
+  },
+  {
+    "name": "shine",
+    "module": "blocks",
+    "package": "@dioramajs/blocks",
+    "import": "@dioramajs/blocks/shine",
+    "builtIn": true,
+    "source": "packages/blocks/src/shine.ts",
+    "category": "block",
+    "tags": ["photo"],
+    "summary": "A glint that sweeps across a button, a card or an image on hover, on a timer or as it comes into view.",
+    "looks": "A soft bright band with a brighter core, width of the element’s length across, travels over the element at angle in duration seconds, easing in and out, clipped to its rounded corners, each one as CSS draws it. Between sweeps nothing is drawn and the element is just DOM.",
+    "target": "any element: a button, a link, a pricing card, a badge, an image",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "trigger",
+        "attribute": "data-dio-trigger",
+        "type": "choice",
+        "default": "hover",
+        "values": ["hover", "interval", "view"],
+        "live": false,
+        "preload": false,
+        "description": "hover sweeps on pointer enter and keyboard focus; interval also sweeps on a timer while on screen, for a call to action; view sweeps once as it comes into view, for a badge or a plan."
+      },
+      {
+        "name": "angle",
+        "attribute": "data-dio-angle",
+        "type": "number",
+        "default": 120,
+        "live": true,
+        "preload": true,
+        "description": "Direction of the sweep, like a CSS gradient angle; 90 goes left to right.",
+        "range": [0, 360],
+        "unit": "deg"
+      },
+      {
+        "name": "width",
+        "attribute": "data-dio-width",
+        "type": "number",
+        "default": 0.35,
+        "live": true,
+        "preload": true,
+        "description": "Width of the band as a share of the element’s length along the sweep.",
+        "range": [0.05, 1],
+        "step": 0.01
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ffffff",
+        "live": true,
+        "preload": true,
+        "description": "Color of the band, any CSS color."
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 1.1,
+        "live": true,
+        "preload": true,
+        "description": "Time one sweep takes.",
+        "range": [0.2, 4],
+        "step": 0.05,
+        "unit": "s"
+      },
+      {
+        "name": "interval",
+        "attribute": "data-dio-interval",
+        "type": "number",
+        "default": 4,
+        "live": true,
+        "preload": true,
+        "description": "Pause between timed sweeps with the interval trigger; 0 sweeps on hover only.",
+        "range": [0, 20],
+        "step": 0.5,
+        "unit": "s"
+      },
+      {
+        "name": "strength",
+        "attribute": "data-dio-strength",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Opacity of the band at its core; 0 hides it.",
+        "range": [0, 1],
+        "step": 0.01
+      }
+    ],
+    "inputs": ["opacity", "presence", "size"],
+    "frames": {
+      "policy": "update",
+      "note": "Only during a sweep; none at rest and none while waiting for the next timed sweep."
+    },
+    "reducedMotion": {
+      "mode": "off",
+      "note": "Off: neither the module nor the engine loads for it, and the element is unchanged."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "A sweep fades with the page as it leaves."
+    },
+    "touch": "A tap sweeps like a hover; the interval and view triggers work as on desktop.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "One quad over the element, drawn only during a sweep.",
+      "memory": "None beyond the quad.",
+      "chunk": 1902
+    },
+    "examples": [
+      {
+        "title": "A glint on a call to action when the pointer comes over it",
+        "html": "<a class=\"button\" href=\"/signup\" data-dio=\"shine\">Start free trial</a>"
+      },
+      {
+        "title": "The featured plan catches the eye every five seconds",
+        "html": "<article class=\"plan featured\" data-dio=\"shine\" data-dio-trigger=\"interval\" data-dio-interval=\"5\" data-dio-width=\"0.25\"><h3>Team</h3><p>$49 per month</p></article>"
+      },
+      {
+        "title": "A gold badge sweeps once as it scrolls into view",
+        "html": "<span class=\"badge\" data-dio=\"shine\" data-dio-trigger=\"view\" data-dio-color=\"#ffe7a3\" data-dio-strength=\"0.6\">Premium</span>"
+      }
+    ]
+  }
+]

@@ -1,5 +1,5 @@
-// @diorama/glsl/entries: a folder of `?entry` modules as a registry. Imports no three.
-import type { EffectEntries, EffectEntry } from '@diorama/effects'
+// @dioramajs/glsl/entries: a folder of `?entry` modules as a registry. Imports no three.
+import type { EffectEntries, EffectEntry } from '@dioramajs/effects'
 import { effectName, SHADER_FILE, VERTEX_FILE } from './effect-name'
 
 /**
@@ -10,9 +10,9 @@ import { effectName, SHADER_FILE, VERTEX_FILE } from './effect-name'
 export function glslEntries(modules: { readonly [path: string]: EffectEntry }): EffectEntries {
   const entries: Record<string, EffectEntry> = {}
   const owners = new Map<string, string>()
-  const paths = Object.keys(modules).map((p) => p.replace(/\?.*$/, ''))
+  const paths = Object.keys(modules).map((path) => path.replace(/\?.*$/, ''))
   const fragments = new Set(
-    paths.filter((p) => !VERTEX_FILE.test(p)).map((p) => p.replace(SHADER_FILE, '')),
+    paths.filter((path) => !VERTEX_FILE.test(path)).map((path) => path.replace(SHADER_FILE, '')),
   )
   for (const [key, entry] of Object.entries(modules)) {
     const path = key.replace(/\?.*$/, '')

@@ -1,7 +1,9 @@
 // The no-build entry for sites without a bundler (plain HTML, Webflow, Tilda):
-//   <script type="module" src="https://cdn.jsdelivr.net/npm/diorama/dist/cdn/auto.js"></script>
+//   <script type="module" src="https://cdn.jsdelivr.net/npm/dioramajs/dist/cdn/auto.js"></script>
 // It starts at once with the media effects and transitions. Options go in `window.diorama`
 // before the tag. Your own effects import `effect` from the same URL to share one instance.
+// dist/esm/index.js is the same entry with three left to the page's import map, for effects
+// that import `three/tsl` themselves.
 import { type StartOptions, start } from './index'
 
 export * from './index'
@@ -13,8 +15,8 @@ interface Globals {
 }
 
 if (typeof window !== 'undefined') {
-  const g = window as unknown as Globals
-  const { manual, ...options } = g.diorama ?? {}
+  const globals = window as unknown as Globals
+  const { manual, ...options } = globals.diorama ?? {}
   // A page that loaded GSAP from a CDN gets the shared ticker without a line of JS.
-  if (!manual) start({ gsap: g.gsap, ScrollTrigger: g.ScrollTrigger, ...options })
+  if (!manual) start({ gsap: globals.gsap, ScrollTrigger: globals.ScrollTrigger, ...options })
 }

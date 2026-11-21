@@ -1,49 +1,241 @@
 {
-  "name": "@diorama/media",
-  "version": "0.0.0",
+  "name": "@dioramajs/media",
+  "version": "0.1.0",
+  "description": "Image and video effects for Diorama: ripple, bend, reveal, parallax, gallery, lightbox, panorama and more.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl",
+    "image",
+    "video",
+    "gallery"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/media"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
-      "@diorama/source": "./src/index.ts",
+      "@dioramajs/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./intro": {
+      "@dioramajs/source": "./src/intro.ts",
+      "types": "./dist/intro.d.ts",
+      "default": "./dist/intro.js"
+    },
     "./image": {
-      "@diorama/source": "./src/image.ts",
+      "@dioramajs/source": "./src/image.ts",
       "types": "./dist/image.d.ts",
       "default": "./dist/image.js"
     },
     "./ripple": {
-      "@diorama/source": "./src/ripple.ts",
+      "@dioramajs/source": "./src/ripple.ts",
       "types": "./dist/ripple.d.ts",
       "default": "./dist/ripple.js"
     },
     "./bend": {
-      "@diorama/source": "./src/bend.ts",
+      "@dioramajs/source": "./src/bend.ts",
       "types": "./dist/bend.d.ts",
       "default": "./dist/bend.js"
     },
-    "./package.json": "./package.json"
+    "./reveal": {
+      "@dioramajs/source": "./src/reveal.ts",
+      "types": "./dist/reveal.d.ts",
+      "default": "./dist/reveal.js"
+    },
+    "./parallax": {
+      "@dioramajs/source": "./src/parallax.ts",
+      "types": "./dist/parallax.d.ts",
+      "default": "./dist/parallax.js"
+    },
+    "./gallery": {
+      "@dioramajs/source": "./src/gallery.ts",
+      "types": "./dist/gallery.d.ts",
+      "default": "./dist/gallery.js"
+    },
+    "./ambient": {
+      "@dioramajs/source": "./src/ambient.ts",
+      "types": "./dist/ambient.d.ts",
+      "default": "./dist/ambient.js"
+    },
+    "./hover-preview": {
+      "@dioramajs/source": "./src/hover-preview.ts",
+      "types": "./dist/hover-preview.d.ts",
+      "default": "./dist/hover-preview.js"
+    },
+    "./sequence": {
+      "@dioramajs/source": "./src/sequence.ts",
+      "types": "./dist/sequence.d.ts",
+      "default": "./dist/sequence.js"
+    },
+    "./expand": {
+      "@dioramajs/source": "./src/expand.ts",
+      "types": "./dist/expand.d.ts",
+      "default": "./dist/expand.js"
+    },
+    "./zoom-scroll": {
+      "@dioramajs/source": "./src/zoom-scroll.ts",
+      "types": "./dist/zoom-scroll.d.ts",
+      "default": "./dist/zoom-scroll.js"
+    },
+    "./compare": {
+      "@dioramajs/source": "./src/compare.ts",
+      "types": "./dist/compare.d.ts",
+      "default": "./dist/compare.js"
+    },
+    "./zoom": {
+      "@dioramajs/source": "./src/zoom.ts",
+      "types": "./dist/zoom.d.ts",
+      "default": "./dist/zoom.js"
+    },
+    "./lightbox": {
+      "@dioramajs/source": "./src/lightbox.ts",
+      "types": "./dist/lightbox.d.ts",
+      "default": "./dist/lightbox.js"
+    },
+    "./panorama": {
+      "@dioramajs/source": "./src/panorama.ts",
+      "types": "./dist/panorama.d.ts",
+      "default": "./dist/panorama.js"
+    },
+    "./tilt": {
+      "@dioramajs/source": "./src/tilt.ts",
+      "types": "./dist/tilt.d.ts",
+      "default": "./dist/tilt.js"
+    },
+    "./tone": {
+      "@dioramajs/source": "./src/tone.ts",
+      "types": "./dist/tone.d.ts",
+      "default": "./dist/tone.js"
+    },
+    "./flipbook": {
+      "@dioramajs/source": "./src/flipbook.ts",
+      "types": "./dist/flipbook.d.ts",
+      "default": "./dist/flipbook.js"
+    },
+    "./spin": {
+      "@dioramajs/source": "./src/spin.ts",
+      "types": "./dist/spin.d.ts",
+      "default": "./dist/spin.js"
+    },
+    "./glitch": {
+      "@dioramajs/source": "./src/glitch.ts",
+      "types": "./dist/glitch.d.ts",
+      "default": "./dist/glitch.js"
+    },
+    "./pixelate": {
+      "@dioramajs/source": "./src/pixelate.ts",
+      "types": "./dist/pixelate.d.ts",
+      "default": "./dist/pixelate.js"
+    },
+    "./video-hover": {
+      "@dioramajs/source": "./src/video-hover.ts",
+      "types": "./dist/video-hover.d.ts",
+      "default": "./dist/video-hover.js"
+    },
+    "./stack": {
+      "@dioramajs/source": "./src/stack.ts",
+      "types": "./dist/stack.d.ts",
+      "default": "./dist/stack.js"
+    },
+    "./coverflow": {
+      "@dioramajs/source": "./src/coverflow.ts",
+      "types": "./dist/coverflow.d.ts",
+      "default": "./dist/coverflow.js"
+    },
+    "./carousel": {
+      "@dioramajs/source": "./src/carousel.ts",
+      "types": "./dist/carousel.d.ts",
+      "default": "./dist/carousel.js"
+    },
+    "./polaroids": {
+      "@dioramajs/source": "./src/polaroids.ts",
+      "types": "./dist/polaroids.d.ts",
+      "default": "./dist/polaroids.js"
+    },
+    "./scrub": {
+      "@dioramajs/source": "./src/scrub.ts",
+      "types": "./dist/scrub.d.ts",
+      "default": "./dist/scrub.js"
+    },
+    "./chroma": {
+      "@dioramajs/source": "./src/chroma.ts",
+      "types": "./dist/chroma.d.ts",
+      "default": "./dist/chroma.js"
+    },
+    "./liquid": {
+      "@dioramajs/source": "./src/liquid.ts",
+      "types": "./dist/liquid.d.ts",
+      "default": "./dist/liquid.js"
+    },
+    "./horizontal": {
+      "@dioramajs/source": "./src/horizontal.ts",
+      "types": "./dist/horizontal.d.ts",
+      "default": "./dist/horizontal.js"
+    },
+    "./curtain": {
+      "@dioramajs/source": "./src/curtain.ts",
+      "types": "./dist/curtain.d.ts",
+      "default": "./dist/curtain.js"
+    },
+    "./meta.json": "./meta.json",
+    "./package.json": "./package.json",
+    "./spotlight": {
+      "@dioramajs/source": "./src/spotlight.ts",
+      "types": "./dist/spotlight.d.ts",
+      "default": "./dist/spotlight.js"
+    },
+    "./flare": {
+      "@dioramajs/source": "./src/flare.ts",
+      "types": "./dist/flare.d.ts",
+      "default": "./dist/flare.js"
+    },
+    "./frost": {
+      "@dioramajs/source": "./src/frost.ts",
+      "types": "./dist/frost.d.ts",
+      "default": "./dist/frost.js"
+    },
+    "./reflection": {
+      "@dioramajs/source": "./src/reflection.ts",
+      "types": "./dist/reflection.d.ts",
+      "default": "./dist/reflection.js"
+    }
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "meta.json"
   ],
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc"
   },
   "peerDependencies": {
-    "@diorama/effects": "workspace:^",
+    "@dioramajs/effects": "workspace:^",
+    "@dioramajs/render": "workspace:^",
     "three": "^0.187.0"
   },
   "devDependencies": {
-    "@diorama/effects": "workspace:*",
+    "@dioramajs/core": "workspace:*",
+    "@dioramajs/effects": "workspace:*",
+    "@dioramajs/render": "workspace:*",
     "@types/three": "^0.187.0",
     "three": "^0.187.0",
     "tsdown": "0.23.4",
     "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

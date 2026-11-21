@@ -1,14 +1,35 @@
 {
-  "name": "@diorama/core",
-  "version": "0.0.0",
+  "name": "@dioramajs/core",
+  "version": "0.1.0",
+  "description": "The core of Diorama: app, plugins, signals, frame loop, stage, scroll and pointer.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/core"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
-      "@diorama/source": "./src/index.ts",
+      "@dioramajs/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./dev": {
+      "@dioramajs/source": "./src/dev.ts",
+      "types": "./dist/dev.d.ts",
+      "default": "./dist/dev.js"
     },
     "./package.json": "./package.json"
   },
@@ -23,5 +44,8 @@
   "devDependencies": {
     "tsdown": "0.23.4",
     "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

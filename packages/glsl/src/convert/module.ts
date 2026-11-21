@@ -1,9 +1,10 @@
 // Text of generated modules and declarations.
-import type { ParamDefault } from '@diorama/effects'
+import type { ParamDefault } from '@dioramajs/effects'
+import type { GlslShader } from '../types'
 
 const IDENT = /^[A-Za-z_$][\w$]*$/
-const quote = (s: string): string =>
-  `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`
+const quote = (text: string): string =>
+  `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`
 export const propertyKey = (k: string): string => (IDENT.test(k) ? k : quote(k))
 
 export const block = (members: readonly string[], indent = ''): string =>
@@ -33,15 +34,15 @@ export function paramsType(
 ): string {
   const entries = Object.entries(params)
   if (!entries.length) return '{}'
-  const r = readonly ? 'readonly ' : ''
+  const prefix = readonly ? 'readonly ' : ''
   const type = (v: ParamDefault): string => {
     if (typeof v === 'number') return 'number'
     if (typeof v === 'boolean') return 'boolean'
     if (typeof v === 'string') return 'string'
     if (Array.isArray(v)) return `readonly [${v.map(() => 'number').join(', ')}]`
-    return "import('@diorama/effects').ColorParam"
+    return "import('@dioramajs/effects').ColorParam"
   }
-  return `{ ${entries.map(([k, v]) => `${r}${propertyKey(k)}: ${type(v)}`).join('; ')} }`
+  return `{ ${entries.map(([k, v]) => `${prefix}${propertyKey(k)}: ${type(v)}`).join('; ')} }`
 }
 
 export interface ModuleParts {
@@ -62,10 +63,45 @@ export const moduleCode = (parts: ModuleParts): string =>
     .filter((line, i) => line !== '' || i > 1)
     .join('\n')
 
+/**
+ * What a registry knows of a shader effect before its module loads: the `EffectEntry` fields
+ * other than `load`. Keys without a pragma are left out.
+ */
+export interface EntryMeta {
+  /** Param defaults of both stages. */
+  readonly params: { readonly [name: string]: ParamDefault }
+  /** From `// @diorama when=…`. */
+  readonly when?: string
+  /** From `// @diorama reducedMotion=…`. */
+  readonly reducedMotion?: 'static' | 'off'
+  /** From `// @diorama presence=…`. */
+  readonly presence?: 'fade' | 'custom'
+}
+
+type StageMeta = Pick<GlslShader, 'params' | 'when' | 'reducedMotion' | 'presence'>
+
+/** Entry metadata of a stage and its pair. `main` (the imported file) wins over `other`. */
+export function entryMeta(main: StageMeta, other?: StageMeta): EntryMeta {
+  const meta: { -readonly [K in keyof EntryMeta]: EntryMeta[K] } = {
+    params: { ...other?.params, ...main.params },
+  }
+  for (const key of ['when', 'reducedMotion', 'presence'] as const) {
+    const value = main[key] ?? other?.[key]
+    if (value) (meta as Record<string, unknown>)[key] = value
+  }
+  return meta
+}
+
+/** The `?entry` module: a lazy import of the effect with its metadata. */
+export const entryModule = (request: string, meta: EntryMeta): string => {
+  const fields = Object.entries(meta).map(([k, v]) => `, ${k}: ${JSON.stringify(v)}`)
+  return `export default { load: () => import(${JSON.stringify(request)})${fields.join('')} }\n`
+}
+
 /** One module with both stages inline, for loaders that cannot import `?shader`. */
 export function inlineEffect(
   stages: { readonly fragment?: ModuleParts; readonly vertex?: ModuleParts },
-  runtime = '@diorama/glsl',
+  runtime = '@dioramajs/glsl',
 ): string {
   const imports = new Set<string>()
   const lines: string[] = []

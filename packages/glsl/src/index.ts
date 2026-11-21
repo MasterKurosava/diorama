@@ -1,4 +1,4 @@
-// @diorama/glsl runtime: converted GLSL stages as effects. Does not include the transpiler.
+// @dioramajs/glsl runtime: converted GLSL stages as effects. Does not include the transpiler.
 export type {
   ApplyOptions,
   GlslEffectOptions,

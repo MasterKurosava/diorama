@@ -4,12 +4,14 @@ import { noop } from '../kernel/util'
 import { onBodySwap } from './body'
 import { velocityTracker } from './motion'
 
+/** Scroll axis: `x` for horizontal, `y` for vertical. */
 export type ScrollAxis = 'x' | 'y'
 
 /** Live scroll state, updated in place in the `input` stage. */
 export interface ScrollState {
   /** Document scroll offset, CSS px. */
   readonly x: number
+  /** Vertical document scroll offset, CSS px. */
   readonly y: number
   /**
    * Smoothed velocity along `axis`, px/s, positive while scrolling down (or right). Reading it
@@ -28,6 +30,7 @@ export interface ScrollState {
 export interface ScrollSample {
   /** Document scroll offset this frame, CSS px, as the page shows it. */
   x: number
+  /** Vertical offset this frame, CSS px. */
   y: number
   /** Continuous position along the axis for velocity. An infinite scroller doesn't wrap it. */
   travel: number
@@ -35,6 +38,7 @@ export interface ScrollSample {
 
 /** Where `scroll` takes the offset from. Without one, window scroll events are cached. */
 export interface ScrollSource {
+  /** Label for logs. */
   readonly name: string
   /** Axis of `progress`, `velocity`, `direction`. Default 'y'. */
   readonly axis?: ScrollAxis
@@ -44,7 +48,9 @@ export interface ScrollSource {
   limit?(): number
 }
 
+/** The `scroll` service. */
 export interface ScrollApi {
+  /** Scroll state, updated in place every frame. */
   readonly state: ScrollState
   /** Re-reads the scrollable range after a layout change the observers cannot see. */
   measure(): void
@@ -58,6 +64,7 @@ export interface ScrollApi {
 const finite = (value: number, fallback: number): number =>
   Number.isFinite(value) ? value : fallback
 
+/** Tracks page scroll, its velocity and progress. Built in. */
 export const scroll: Plugin<'scroll'> = /*#__PURE__*/ definePlugin({
   name: 'scroll',
   setup(app): ScrollApi {
@@ -115,68 +122,75 @@ export const scroll: Plugin<'scroll'> = /*#__PURE__*/ definePlugin({
     let lastTravel = y
     // The first frame, and the one after a resync, re-base travel without feeding velocity.
     let resync = true
+    // The active source threw last frame. Errors are reported once per streak.
     let failing = false
     const switched = (): void => {
       resync = true
       failing = false
       app.invalidate()
     }
-    const source = (src: ScrollSource): Off => {
-      sources.push(src)
+    const source = (added: ScrollSource): Off => {
+      sources.push(added)
       switched()
       return () => {
-        const index = sources.indexOf(src)
+        const index = sources.indexOf(added)
         if (index < 0) return
         sources.splice(index, 1)
         switched()
       }
     }
 
+    /** Fills `sample` from the active source, or from native offsets if it throws. */
+    const readSource = (active: ScrollSource): number | undefined => {
+      sample.x = x
+      sample.y = y
+      sample.travel = lastTravel
+      try {
+        active.read(sample)
+        const limit = active.limit?.()
+        sample.x = finite(sample.x, x)
+        sample.y = finite(sample.y, y)
+        sample.travel = finite(sample.travel, lastTravel)
+        // A recovering source may be in another domain than the native fallback.
+        if (failing) resync = true
+        failing = false
+        return limit
+      } catch (error) {
+        if (!failing) app.report(error, `scroll:${active.name}`)
+        failing = true
+        sample.x = x
+        sample.y = y
+        sample.travel = lastTravel
+        return undefined
+      }
+    }
+
     app.system(
       'input',
-      (t) => {
-        const src = sources.at(-1)
-        let sx = x
-        let sy = y
-        let travel = y
+      (time) => {
+        const active = sources.at(-1)
         let limit: number | undefined
-        if (src) {
+        if (active) {
+          limit = readSource(active)
+        } else {
           sample.x = x
           sample.y = y
-          sample.travel = lastTravel
-          try {
-            src.read(sample)
-            limit = src.limit?.()
-            sx = finite(sample.x, x)
-            sy = finite(sample.y, y)
-            travel = finite(sample.travel, lastTravel)
-            // A recovering source may be in another domain than the native fallback.
-            if (failing) resync = true
-            failing = false
-          } catch (error) {
-            // Report once per streak of failures and fall back to native offsets.
-            if (!failing) app.report(error, `scroll:${src.name}`)
-            failing = true
-            travel = lastTravel
-          }
+          sample.travel = y
         }
-        const axis = src?.axis ?? 'y'
-        const d = travel - lastTravel
+        const axis = active?.axis ?? 'y'
+        const moved = sample.travel - lastTravel
         // A jump (restore, #hash, scrollTo immediate) or a wake after idle is no motion.
-        if (resync || t.resumed || Math.abs(d) > (axis === 'x' ? innerWidth : innerHeight))
-          resync = false
-        else track.update(d, t)
-        lastTravel = travel
-        const range =
-          Number.isFinite(limit) && (limit as number) > 0
-            ? (limit as number)
-            : axis === 'x'
-              ? rangeX
-              : rangeY
+        if (resync || time.resumed) resync = false
+        else if (Math.abs(moved) > (axis === 'x' ? innerWidth : innerHeight)) resync = false
+        else track.update(moved, time)
+        lastTravel = sample.travel
+        let range = axis === 'x' ? rangeX : rangeY
+        if (Number.isFinite(limit) && (limit as number) > 0) range = limit as number
+        const offset = axis === 'x' ? sample.x : sample.y
         state.axis = axis
-        state.x = sx
-        state.y = sy
-        state.progress = range > 0 ? Math.min(1, Math.max(0, (axis === 'x' ? sx : sy) / range)) : 0
+        state.x = sample.x
+        state.y = sample.y
+        state.progress = range > 0 ? Math.min(1, Math.max(0, offset / range)) : 0
       },
       { name: 'scroll' },
     )

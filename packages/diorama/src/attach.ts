@@ -1,10 +1,28 @@
 // `app.attach` that works right after `start()`. The kernel installs the real service later,
 // so until then a handle records what the site does and replays it.
-import type { App } from '@diorama/core'
-import type { Attach, EffectHandle, EffectInstance } from '@diorama/effects'
+import { type App, DioramaError } from '@dioramajs/core'
+import type { Attach, EffectHandle, EffectInstance } from '@dioramajs/effects'
 
-/** Resolves once the app runs. Rejects if it fails or is destroyed first. */
-export function ready(app: App): Promise<App> {
+let page: App | undefined
+const waiting: ((app: App) => void)[] = []
+
+/** Makes `app` the page's app, the one `ready()` without an argument waits for. */
+export function adopt(app: App): void {
+  page = app
+  for (const resolve of waiting.splice(0)) resolve(app)
+}
+
+/**
+ * Resolves with the app once it runs: the page's app of `start()` by default, waiting for the
+ * call if it has not happened yet. Rejects if the app fails or is destroyed first.
+ *
+ *     const app = await ready()
+ *     app.effects.get(el, 'ripple')
+ */
+export function ready(app?: App): Promise<App> {
+  // A destroyed page app is replaced by the next start().
+  app ??= page?.state.value === 'destroyed' ? undefined : page
+  if (!app) return new Promise<App>((resolve) => waiting.push(resolve)).then((a) => ready(a))
   return new Promise((resolve, reject) => {
     const check = (state: string): boolean => {
       if (state === 'running') resolve(app)
@@ -17,6 +35,47 @@ export function ready(app: App): Promise<App> {
     const off = app.state.subscribe((state) => {
       if (check(state)) off()
     })
+  })
+}
+
+/** Services `start()` installs during the async start, plus the kernel's own. */
+const SERVICES = [
+  'effects',
+  'assets',
+  'transition',
+  'gsap',
+  'lenis',
+  'stage',
+  'scroll',
+  'pointer',
+  'anchors',
+  'visibility',
+]
+
+/**
+ * Until the app runs, reading one of its services throws an error that names the fix instead
+ * of returning undefined, which fails later as "cannot read properties of undefined".
+ */
+export function guard(app: App): void {
+  const proto = Object.getPrototypeOf(app) as object
+  const starting = (): boolean => app.state.value === 'idle' || app.state.value === 'starting'
+  for (const name of SERVICES) {
+    Object.defineProperty(app, name, {
+      configurable: true,
+      get() {
+        const real = Reflect.get(proto, name, app)
+        if (real !== undefined || !starting()) return real
+        throw new DioramaError(
+          'SERVICE_UNAVAILABLE',
+          `app.${name} is not ready yet: start() returns before its services exist. Use \`(await ready()).${name}\`; attach() works at once`,
+        )
+      },
+    })
+  }
+  const off = app.state.subscribe(() => {
+    if (starting()) return
+    off()
+    for (const name of SERVICES) Reflect.deleteProperty(app, name)
   })
 }
 
@@ -35,6 +94,7 @@ export function deferAttach(app: App): void {
   })
 }
 
+/** A handle that records params and replays the attach on the real service once the app runs. */
 function later(app: App, args: unknown[]): EffectHandle {
   let real: EffectHandle | undefined
   let cancelled = false

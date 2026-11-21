@@ -14,8 +14,9 @@ export type {
   ScrollTriggerStatic,
 } from './types'
 
-declare module '@diorama/core' {
+declare module '@dioramajs/core' {
   interface Services {
+    /** GSAP adapter, see `GsapApi`. */
     gsap: GsapApi
   }
 }

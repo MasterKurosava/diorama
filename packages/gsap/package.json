@@ -1,12 +1,30 @@
 {
-  "name": "@diorama/gsap",
-  "version": "0.0.0",
+  "name": "@dioramajs/gsap",
+  "version": "0.1.0",
+  "description": "GSAP and ScrollTrigger integration for Diorama.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl",
+    "gsap",
+    "scrolltrigger"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/gsap"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
-      "@diorama/source": "./src/index.ts",
+      "@dioramajs/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
@@ -21,13 +39,16 @@
     "typecheck": "tsc"
   },
   "peerDependencies": {
-    "@diorama/core": "workspace:^",
+    "@dioramajs/core": "workspace:^",
     "gsap": "^3.12.0"
   },
   "devDependencies": {
-    "@diorama/core": "workspace:*",
+    "@dioramajs/core": "workspace:*",
     "gsap": "3.15.0",
     "tsdown": "0.23.4",
     "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

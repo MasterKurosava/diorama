@@ -36,13 +36,13 @@ interface NumberLiteral {
   readonly value: number
   readonly type: 'int' | 'float'
 }
-function numberLiteral(e: Ast | null | undefined): NumberLiteral | undefined {
-  if (e?.isNumber && (e.type === 'int' || e.type === 'float')) {
-    const value = Number(String(e.value).replace(/[fF]$/, ''))
-    return Number.isFinite(value) ? { value, type: e.type } : undefined
+function numberLiteral(expression: Ast | null | undefined): NumberLiteral | undefined {
+  if (expression?.isNumber && (expression.type === 'int' || expression.type === 'float')) {
+    const value = Number(String(expression.value).replace(/[fF]$/, ''))
+    return Number.isFinite(value) ? { value, type: expression.type } : undefined
   }
-  if (e?.isUnary && e.type === '-') {
-    const inner = numberLiteral(e.expression)
+  if (expression?.isUnary && expression.type === '-') {
+    const inner = numberLiteral(expression.expression)
     return inner && { value: -inner.value, type: inner.type }
   }
   return undefined
@@ -50,8 +50,8 @@ function numberLiteral(e: Ast | null | undefined): NumberLiteral | undefined {
 
 function numberNode({ value, type }: NumberLiteral): Ast {
   const text = String(Math.abs(value))
-  const n = new AST.Number(type === 'float' && /^\d+$/.test(text) ? `${text}.0` : text, type)
-  return value < 0 ? new AST.Unary('-', n) : n
+  const node = new AST.Number(type === 'float' && /^\d+$/.test(text) ? `${text}.0` : text, type)
+  return value < 0 ? new AST.Unary('-', node) : node
 }
 
 const ARITHMETIC: Record<string, (a: number, b: number, int: boolean) => number | undefined> = {
@@ -66,11 +66,11 @@ const ARITHMETIC: Record<string, (a: number, b: number, int: boolean) => number 
  * three emits literal arithmetic as JS, where `7 / 2` gives 3.5, so fold anything with an int.
  * Float-only arithmetic can stay JS. The doubles match and `1.0 / 289.0` reads better.
  */
-function foldLiteral(n: Ast): Ast | undefined {
-  if (!n.isOperator) return undefined
-  const op = ARITHMETIC[n.type]
-  const a = numberLiteral(n.left)
-  const b = numberLiteral(n.right)
+function foldLiteral(node: Ast): Ast | undefined {
+  if (!node.isOperator) return undefined
+  const op = ARITHMETIC[node.type]
+  const a = numberLiteral(node.left)
+  const b = numberLiteral(node.right)
   if (!op || !a || !b || (a.type === 'float' && b.type === 'float')) return undefined
   const int = a.type === 'int' && b.type === 'int'
   const value = op(a.value, b.value, int)
@@ -80,11 +80,11 @@ function foldLiteral(n: Ast): Ast | undefined {
 }
 
 /** `matN` of literals: TSL builds it with three's row-major `set`, so it comes out transposed. */
-function matrixLiteral(n: Ast): Ast | undefined {
-  const m = n.isFunctionCall ? /^mat([234])$/.exec(n.name) : null
-  if (!m) return undefined
-  const size = Number(m[1])
-  const values = n.params.map(numberLiteral)
+function matrixLiteral(node: Ast): Ast | undefined {
+  const match = node.isFunctionCall ? /^mat([234])$/.exec(node.name) : null
+  if (!match) return undefined
+  const size = Number(match[1])
+  const values = node.params.map(numberLiteral)
   if (!values.length || !values.every(Boolean)) return undefined
   if (values.length !== 1 && values.length !== size * size) return undefined
   const zero: NumberLiteral = { value: 0, type: 'float' }
@@ -100,14 +100,14 @@ function matrixLiteral(n: Ast): Ast | undefined {
         Array.from({ length: size }, (_, row) => numberNode(at(col, row))),
       ),
   )
-  return new AST.FunctionCall(n.name, columns)
+  return new AST.FunctionCall(node.name, columns)
 }
 
 /** A `for` that three can emit as `Loop({ start, end })`. */
-export function simpleLoop(f: Ast): boolean {
-  const init = f.initialization
-  const cond = f.condition
-  const after = f.afterthought
+export function simpleLoop(loop: Ast): boolean {
+  const init = loop.initialization
+  const cond = loop.condition
+  const after = loop.afterthought
   return (
     !!init?.isVariableDeclaration &&
     init.next === null &&
@@ -121,16 +121,16 @@ export function simpleLoop(f: Ast): boolean {
 
 /** Whether the body continues this loop, not a nested one. */
 function continues(body: readonly Ast[]): boolean {
-  const own = (n: Ast): boolean =>
-    !!n.isContinue || (!n.isFor && !n.isWhile && children(n).some(own))
+  const own = (node: Ast): boolean =>
+    !!node.isContinue || (!node.isFor && !node.isWhile && children(node).some(own))
   return body.some(own)
 }
 
-const isStep = (n: Ast | null | undefined): n is Ast =>
-  !!n?.isUnary && (n.type === '++' || n.type === '--')
+const isStep = (node: Ast | null | undefined): node is Ast =>
+  !!node?.isUnary && (node.type === '++' || node.type === '--')
 /** `x++` as a statement: TSL's increment() returns a value and never reaches the stack. */
-const step = (n: Ast): Ast =>
-  new AST.Operator(n.type === '++' ? '+=' : '-=', n.expression, new AST.Number('1', 'int'))
+const step = (node: Ast): Ast =>
+  new AST.Operator(node.type === '++' ? '+=' : '-=', node.expression, new AST.Number('1', 'int'))
 
 /**
  * Tree rewrites before linking: literal arithmetic, matrix literals, `for` loops three can't
@@ -138,28 +138,28 @@ const step = (n: Ast): Ast =>
  */
 export function syntax(program: Ast, report: Reporter, where: Where): Set<string> {
   const fixes = new Set<string>()
-  rewrite(program, (n) => {
-    const next = foldLiteral(n) ?? matrixLiteral(n)
-    if (next) fixes.add(n.isOperator ? 'int-literal' : 'matrix')
+  rewrite(program, (node) => {
+    const next = foldLiteral(node) ?? matrixLiteral(node)
+    if (next) fixes.add(node.isOperator ? 'int-literal' : 'matrix')
     return next
   })
 
   bodies(program, (body) => {
     for (let i = 0; i < body.length; i++) {
-      const s = body[i] as Ast
-      if (!s.isFor) continue
-      const fn = ownerFn(s)
-      if (!s.condition) s.condition = new AST.Number('true', 'bool')
-      if (simpleLoop(s)) continue
-      if (s.initialization?.next) {
+      const statement = body[i] as Ast
+      if (!statement.isFor) continue
+      const fn = ownerFn(statement)
+      if (!statement.condition) statement.condition = new AST.Number('true', 'bool')
+      if (simpleLoop(statement)) continue
+      if (statement.initialization?.next) {
         report.add(
           'GLSL_TRANSPILER',
-          where(s.initialization.next.name, fn),
+          where(statement.initialization.next.name, fn),
           'several variables in a `for` header',
           'declare the second variable before the loop',
         )
       }
-      if (s.afterthought && continues(s.body)) {
+      if (statement.afterthought && continues(statement.body)) {
         report.add(
           'GLSL_TRANSPILER',
           where('continue', fn),
@@ -167,14 +167,14 @@ export function syntax(program: Ast, report: Reporter, where: Where): Set<string
           'write the loop as `for (int i = 0; i < N; i++)` or replace continue with if',
         )
       }
-      if (s.initialization && s.afterthought) continue
+      if (statement.initialization && statement.afterthought) continue
       // three's encoder needs all three parts of a `for`. Emit a `while` in its own block instead.
-      const loop = new AST.While(s.condition, [
-        ...s.body,
-        ...(s.afterthought ? [s.afterthought] : []),
+      const loop = new AST.While(statement.condition, [
+        ...statement.body,
+        ...(statement.afterthought ? [statement.afterthought] : []),
       ])
-      body[i] = s.initialization
-        ? new AST.Conditional(new AST.Number('true', 'bool'), [s.initialization, loop])
+      body[i] = statement.initialization
+        ? new AST.Conditional(new AST.Number('true', 'bool'), [statement.initialization, loop])
         : loop
       fixes.add('loop')
     }
@@ -185,16 +185,17 @@ export function syntax(program: Ast, report: Reporter, where: Where): Set<string
       }
     }
   })
-  walk(program, (n) => {
-    if (n.isFor && !simpleLoop(n) && isStep(n.afterthought)) n.afterthought = step(n.afterthought)
+  walk(program, (node) => {
+    if (node.isFor && !simpleLoop(node) && isStep(node.afterthought))
+      node.afterthought = step(node.afterthought)
   })
-  walk(program, (n) => {
-    if (!isStep(n)) return
-    if (n.parent?.isFor && n.parent.afterthought === n && simpleLoop(n.parent)) return
+  walk(program, (node) => {
+    if (!isStep(node)) return
+    if (node.parent?.isFor && node.parent.afterthought === node && simpleLoop(node.parent)) return
     report.add(
       'GLSL_TRANSPILER',
-      where(n.expression.property ?? n.type, ownerFn(n)),
-      `\`${n.type}\` inside an expression: TSL r187 evaluates it as int`,
+      where(node.expression.property ?? node.type, ownerFn(node)),
+      `\`${node.type}\` inside an expression: TSL r187 evaluates it as int`,
       'move the increment into its own statement: `x += 1.0;`',
     )
   })
@@ -220,8 +221,8 @@ const PREFIX: Record<string, string> = { float: '', int: 'i', uint: 'u', bool: '
 const isVector = (t: string | undefined): boolean => !!t && VECTOR.test(t)
 const isMatrix = (t: string | undefined): boolean => !!t && /^mat[234]$/.test(t)
 const scalarOf = (t: string): string => {
-  const m = VECTOR.exec(t)
-  return m ? (COMPONENT[m[1] as string] as string) : t
+  const match = VECTOR.exec(t)
+  return match ? (COMPONENT[match[1] as string] as string) : t
 }
 const sizeOf = (t: string): number =>
   Number(VECTOR.exec(t)?.[2] ?? /^mat([234])$/.exec(t)?.[1] ?? 1)
@@ -274,51 +275,54 @@ export function pick(call: Ast, group: readonly Ast[], typing: Typing): Ast | un
 }
 
 /** The GLSL type of an expression, when it is evident. */
-export function typeOf(e: Ast | null | undefined, typing: Typing): string | undefined {
-  if (!e) return undefined
-  if (e.isNumber) return e.type
-  if (e.isUnary) return e.type === '!' ? 'bool' : typeOf(e.expression, typing)
-  if (e.isTernary) return typeOf(e.left, typing) ?? typeOf(e.right, typing)
-  if (e.isAccessor) {
-    const sym = typing.sym(e)
+export function typeOf(expression: Ast | null | undefined, typing: Typing): string | undefined {
+  if (!expression) return undefined
+  if (expression.isNumber) return expression.type
+  if (expression.isUnary)
+    return expression.type === '!' ? 'bool' : typeOf(expression.expression, typing)
+  if (expression.isTernary)
+    return typeOf(expression.left, typing) ?? typeOf(expression.right, typing)
+  if (expression.isAccessor) {
+    const sym = typing.sym(expression)
     let type = sym?.type
-    for (const part of e.property.split('.').slice(1)) type = member(type, part, typing)
+    for (const part of expression.property.split('.').slice(1)) type = member(type, part, typing)
     return type
   }
-  if (e.isAccessorElements) {
-    let type = typeOf(e.object, typing)
-    for (const el of e.elements) {
+  if (expression.isAccessorElements) {
+    let type = typeOf(expression.object, typing)
+    for (const el of expression.elements) {
       type = el.isStaticElement ? member(type, el.value?.property ?? '', typing) : index(type)
     }
     return type
   }
-  if (e.isFunctionCall) {
-    if (CONSTRUCTOR.test(e.name) || typing.structs.has(e.name)) return e.name
-    const sym = typing.call(e)
+  if (expression.isFunctionCall) {
+    if (CONSTRUCTOR.test(expression.name) || typing.structs.has(expression.name))
+      return expression.name
+    const sym = typing.call(expression)
     if (sym?.kind === 'function') {
-      const group = overloads(typing, e.name)
+      const group = overloads(typing, expression.name)
       const types = new Set(group.map((f) => f.type))
-      return types.size === 1 ? group[0]?.type : pick(e, group, typing)?.type
+      return types.size === 1 ? group[0]?.type : pick(expression, group, typing)?.type
     }
     if (sym) return sym.type
-    if (SAMPLE.test(e.name)) return 'vec4'
-    if (e.name === 'textureSize') return 'ivec2'
-    if (e.name === 'all' || e.name === 'any') return 'bool'
-    if (e.name === 'cross') return 'vec3'
-    const args = e.params.map((p) => typeOf(p, typing))
+    if (SAMPLE.test(expression.name)) return 'vec4'
+    if (expression.name === 'textureSize') return 'ivec2'
+    if (expression.name === 'all' || expression.name === 'any') return 'bool'
+    if (expression.name === 'cross') return 'vec3'
+    const args = expression.params.map((p) => typeOf(p, typing))
     const first = args[0]
-    if (SCALAR_RESULT.has(e.name)) return first && scalarOf(first)
-    if (COMPARE.has(e.name)) return first && vectorOf('bool', sizeOf(first))
+    if (SCALAR_RESULT.has(expression.name)) return first && scalarOf(first)
+    if (COMPARE.has(expression.name)) return first && vectorOf('bool', sizeOf(first))
     // genType built-ins return the widest argument type (`step(0.5, v)`, `mix(a, b, 0.5)`).
     return args.find(isMatrix) ?? args.find(isVector) ?? (args.every(Boolean) ? first : undefined)
   }
-  if (e.isOperator) {
-    if (e.isAssignment) return typeOf(e.left, typing)
-    if (/^(==|!=|<|>|<=|>=|&&|\|\||\^\^)$/.test(e.type)) return 'bool'
-    const l = typeOf(e.left, typing)
-    const r = typeOf(e.right, typing)
-    if (e.type === '*' && isMatrix(l) && isVector(r)) return r
-    if (e.type === '*' && isVector(l) && isMatrix(r)) return l
+  if (expression.isOperator) {
+    if (expression.isAssignment) return typeOf(expression.left, typing)
+    if (/^(==|!=|<|>|<=|>=|&&|\|\||\^\^)$/.test(expression.type)) return 'bool'
+    const l = typeOf(expression.left, typing)
+    const r = typeOf(expression.right, typing)
+    if (expression.type === '*' && isMatrix(l) && isVector(r)) return r
+    if (expression.type === '*' && isVector(l) && isMatrix(r)) return l
     if (isMatrix(l)) return l
     if (isMatrix(r)) return r
     if (isVector(l)) return l

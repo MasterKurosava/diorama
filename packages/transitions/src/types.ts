@@ -1,9 +1,11 @@
-import type { Cleanup, Off, ReadonlySignal } from '@diorama/core'
+import type { Cleanup, Off, ReadonlySignal } from '@dioramajs/core'
 
 /** Changes the DOM. May return a thenable that settles once the router is done. */
 export type Swap = () => unknown
+/** An easing function from 0..1 to 0..1. */
 export type Ease = (t: number) => number
 
+/** How copies fly between pages. */
 export interface FlightOptions {
   /** Seconds. Default 0.8. */
   readonly duration: number
@@ -17,6 +19,7 @@ export interface FlightOptions {
   readonly wait: number
 }
 
+/** How unpaired copies leave and new ones enter. */
 export interface PresenceOptions {
   /**
    * Seconds unpaired copies outlive their removed elements, as u.presence goes from 1 to 0.
@@ -32,6 +35,7 @@ export interface PresenceOptions {
   readonly enter: number
 }
 
+/** Options of one `app.transition` call. Unset fields take the plugin options. */
 export interface TransitionOptions extends Partial<FlightOptions & PresenceOptions> {
   /**
    * Custom choreography, called when the flights start. Its result is awaited, so a GSAP timeline
@@ -52,6 +56,7 @@ export interface TransitionOptions extends Partial<FlightOptions & PresenceOptio
   readonly viewTransition?: ViewTransition | null
 }
 
+/** Options of the `transitions` preset. */
 export interface TransitionsOptions extends FlightOptions, PresenceOptions {
   /** Pair copies on DOM changes made without app.transition (React/Vue commits). Default true. */
   readonly auto: boolean
@@ -64,15 +69,20 @@ export interface TransitionsOptions extends FlightOptions, PresenceOptions {
   readonly sources: 'hold' | 'follow'
 }
 
+/** Phase of a transition: the swap runs, copies fly, or it is over. */
 export type TransitionPhase = 'swapping' | 'flying' | 'done'
+/** State of one flight. */
 export type FlightState = 'flying' | 'holding' | 'crossfading' | 'leaving' | 'done'
 
 /** Every write requests a frame, so it can be tweened directly. */
 export interface Flight {
+  /** The `data-dio-key` that paired the two elements. */
   readonly key: string
   /** The element that left (detached, or still in the DOM with Barba sync). */
   readonly from: Element
+  /** The element that came in. */
   readonly to: Element
+  /** Where the flight is now. */
   readonly state: FlightState
   /** 0 at the source box, 1 at the target box. Eased by `ease` unless `animate` drives it. */
   progress: number
@@ -80,21 +90,27 @@ export interface Flight {
   opacity: number
 }
 
+/** An unpaired copy that leaves or a new copy that enters. */
 export interface Presence {
+  /** The element of the copy. */
   readonly element: Element
   /** u.presence of the copy, or its opacity under reduced motion. 0 is absent, 1 present. */
   presence: number
 }
 
+/** How a transition ended. */
 export interface TransitionResult {
+  /** How it ended. `superseded` means a newer transition took over. */
   readonly status: 'done' | 'superseded' | 'aborted' | 'failed' | 'skipped'
   /** Number of flights that landed. */
   readonly flights: number
+  /** The swap error, for `failed`. */
   readonly error?: unknown
 }
 
 /** Thenable. Resolves with the result and never rejects. */
 export interface Transition extends PromiseLike<TransitionResult> {
+  /** Current phase. */
   readonly phase: ReadonlySignal<TransitionPhase>
   /** Created by auto mode or a late partner rather than by app.transition. */
   readonly auto: boolean
@@ -113,10 +129,13 @@ export interface Transition extends PromiseLike<TransitionResult> {
   readonly entering: readonly Presence[]
   /** Lands everything now. Copies jump to their targets and fades end. */
   finish(): void
+  /** Lands everything now and ends with `aborted`. */
   abort(): void
 }
 
+/** The current page: a scope closed when the next page replaces it. */
 export interface PageScope {
+  /** URL of the page. */
   readonly url: string
   /** Aborted when the page closes. */
   readonly signal: AbortSignal
@@ -124,27 +143,34 @@ export interface PageScope {
   onDispose(cleanup: Cleanup): Off
 }
 
+/** The `transition` service: call it with a swap to fly copies between pages. */
 export interface TransitionApi {
   /** Snapshots, calls `swap` once synchronously and flies the pairs. A sync throw is rethrown. */
   (swap: Swap, options?: TransitionOptions): Transition
+  /** The running transition, if any. */
   readonly current: ReadonlySignal<Transition | undefined>
   /** The current page. Closed right after the next swap. */
   readonly page: PageScope
 }
 
+/** Codes of `TransitionError`. */
 export type TransitionErrorCode =
   | 'TRANSITION_SWAP'
   | 'TRANSITION_TIMEOUT'
   | 'TRANSITION_KEY'
   | 'TRANSITION_ANIMATE'
 
-declare module '@diorama/core' {
+declare module '@dioramajs/core' {
   interface Services {
+    /** Page transitions, see `TransitionApi`. */
     transition: TransitionApi
   }
   interface Events {
+    /** The page at `url` is about to be replaced. */
     'page:leave': { readonly url: string }
+    /** The page at `url` came in. */
     'page:enter': { readonly url: string }
+    /** A transition ended. */
     'transition:end': { readonly transition: Transition; readonly result: TransitionResult }
   }
 }

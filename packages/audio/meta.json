@@ -1,0 +1,367 @@
+[
+  {
+    "name": "beat",
+    "module": "audio",
+    "package": "@dioramajs/audio",
+    "import": "@dioramajs/audio/beat",
+    "builtIn": true,
+    "source": "packages/audio/src/beat.ts",
+    "category": "audio",
+    "tags": ["block"],
+    "summary": "A cover, logo, card or play button that pulses with the music of a page player: it scales, shakes and glows, or sends out rings, on the beat.",
+    "looks": "While the <audio> or <video> plays, the element swells by zoom on every beat of the kick drum and settles back over duration, with a soft halo in color around its rounded shape, or a ring that travels outward from its edge for each beat. by bass follows the bass line instead of single beats, by level the loudness of any sound, such as a voice. The element itself stays live DOM: links and buttons work, text stays sharp. Paused, nothing moves and nothing draws.",
+    "target": "any element near an <audio> or <video>: a cover image, a logo, a card or the play button; the player is the nearest one around it, or the one data-dio-for names",
+    "on": ":not(audio, video, canvas)",
+    "bleed": 96,
+    "params": [
+      {
+        "name": "for",
+        "attribute": "data-dio-for",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Selector of the audio or video; empty takes the first one in the closest container that holds one."
+      },
+      {
+        "name": "by",
+        "attribute": "data-dio-by",
+        "type": "choice",
+        "default": "beat",
+        "values": ["beat", "bass", "level"],
+        "live": false,
+        "preload": false,
+        "description": "What drives the pulse: beat jumps on each kick drum, for music with a beat; bass follows the bass line smoothly, for slow or ambient music; level follows the loudness, for podcasts and talks."
+      },
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "glow",
+        "values": ["glow", "ring"],
+        "live": false,
+        "preload": false,
+        "description": "glow lights a soft halo around the element that breathes with the pulse; ring sends a thin ring out from its edge on each beat, for round play buttons and avatars."
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ff5a36",
+        "live": true,
+        "preload": true,
+        "description": "Color of the halo and the rings, any CSS color."
+      },
+      {
+        "name": "zoom",
+        "attribute": "data-dio-zoom",
+        "type": "number",
+        "default": 1.06,
+        "live": true,
+        "preload": true,
+        "description": "Scale of the element at the top of a pulse, 1.06 grows it by 6 %; 1 or 0 keeps its size.",
+        "range": [1, 1.3],
+        "step": 0.01
+      },
+      {
+        "name": "shake",
+        "attribute": "data-dio-shake",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "How far the element jolts on a beat, in a new direction each time; 0 keeps it still.",
+        "range": [0, 12],
+        "step": 0.5,
+        "unit": "px"
+      },
+      {
+        "name": "glow",
+        "attribute": "data-dio-glow",
+        "type": "number",
+        "default": 0.8,
+        "live": true,
+        "preload": true,
+        "description": "Strength of the halo and the rings; 0 draws nothing and leaves only zoom and shake.",
+        "range": [0, 1],
+        "step": 0.05
+      },
+      {
+        "name": "spread",
+        "attribute": "data-dio-spread",
+        "type": "number",
+        "default": 28,
+        "live": true,
+        "preload": true,
+        "description": "How far the halo reaches and the rings travel past the edge.",
+        "range": [0, 96],
+        "step": 1,
+        "unit": "px"
+      },
+      {
+        "name": "sensitivity",
+        "attribute": "data-dio-sensitivity",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "How readily a rise in the bass counts as a beat; higher catches softer beats.",
+        "range": [0, 1],
+        "step": 0.05
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 0.25,
+        "live": true,
+        "preload": true,
+        "description": "Time a pulse takes to settle back.",
+        "range": [0.05, 1.5],
+        "step": 0.01,
+        "unit": "s"
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 60,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 30,
+          "medium": 45
+        },
+        "description": "Frame cap while the music plays.",
+        "range": [1, 60],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "opacity", "reducedMotion"],
+    "frames": {
+      "policy": "fps",
+      "note": "None while the player is paused; at most fps while it plays, then until the last pulse and ring fade."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "No zoom, shake or rings: while the music plays the halo holds a steady soft light, and the sound is never analyzed."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "The halo fades with the page; the element itself leaves with the DOM."
+    },
+    "touch": "The same as with a mouse: the pulse follows the sound, not the pointer.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 30 fps.",
+        "medium": "At most 45 fps."
+      }
+    },
+    "cost": {
+      "gpu": "One quad around the element drawn by a fragment shader, only while a pulse or a ring shows.",
+      "memory": "A few kilobytes of analyzer data.",
+      "chunk": 4132
+    },
+    "examples": [
+      {
+        "title": "An album cover that swells on the kick drum",
+        "html": "<audio id=\"track\" src=\"/audio/single.mp3\" controls=\"\" preload=\"metadata\"></audio><img class=\"cover\" src=\"/img/cover.jpg\" alt=\"Night Drive, the single\" data-dio=\"beat\" data-dio-for=\"#track\">"
+      },
+      {
+        "title": "A round play button that sends out rings",
+        "html": "<div class=\"player\"><button class=\"play\" data-dio=\"beat\" data-dio-style=\"ring\" data-dio-zoom=\"1.03\" data-dio-color=\"#7fd3ff\">Play</button><audio src=\"/audio/live-set.mp3\" preload=\"none\"></audio></div>"
+      },
+      {
+        "title": "A podcast cover that breathes with the voice",
+        "html": "<figure class=\"episode\"><img src=\"/img/ep42.jpg\" alt=\"Episode 42\" data-dio=\"beat\" data-dio-by=\"level\" data-dio-zoom=\"1.02\" data-dio-glow=\"0.5\"><audio src=\"/audio/ep42.mp3\" controls=\"\" preload=\"none\"></audio></figure>"
+      }
+    ]
+  },
+  {
+    "name": "visualizer",
+    "module": "audio",
+    "package": "@dioramajs/audio",
+    "import": "@dioramajs/audio/visualizer",
+    "builtIn": true,
+    "source": "packages/audio/src/visualizer.ts",
+    "category": "audio",
+    "summary": "The sound of a page player made visible: live bars, a wave, a ring or a waveform.",
+    "looks": "bars draws the spectrum on a log scale from 40 Hz to 16 kHz with a soft fall, wave the oscilloscope as a ribbon, ring the bars around a circle. peaks draws the waveform of the whole track from precomputed peaks, the played part in accent; a click or a drag seeks and hover shows the position. The <audio controls> stays the DOM: native controls, keyboard and media keys.",
+    "target": "an empty decorative element next to an <audio> or <video>",
+    "on": ":not(img, video, audio, canvas)",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "for",
+        "attribute": "data-dio-for",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Selector of the audio or video; empty takes the closest one before it."
+      },
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "bars",
+        "values": ["bars", "wave", "ring", "peaks"],
+        "live": false,
+        "preload": false,
+        "description": "bars, wave, ring, or peaks for a waveform of the whole track."
+      },
+      {
+        "name": "peaks",
+        "attribute": "data-dio-peaks",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "URL of the peaks JSON: audiowaveform v2 or an array of 0..1."
+      },
+      {
+        "name": "bars",
+        "attribute": "data-dio-bars",
+        "type": "number",
+        "default": 48,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 24
+        },
+        "description": "Number of bars.",
+        "range": [8, 128],
+        "step": 1
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ffffff",
+        "live": true,
+        "preload": true,
+        "description": "Color of the bars, the wave and the unplayed part."
+      },
+      {
+        "name": "accent",
+        "attribute": "data-dio-accent",
+        "type": "color",
+        "default": "#ff5a36",
+        "live": true,
+        "preload": true,
+        "description": "Color of the played part and the position mark."
+      },
+      {
+        "name": "gap",
+        "attribute": "data-dio-gap",
+        "type": "number",
+        "default": 0.3,
+        "live": true,
+        "preload": true,
+        "description": "Gap between bars as a share of a step.",
+        "range": [0, 0.9]
+      },
+      {
+        "name": "radius",
+        "attribute": "data-dio-radius",
+        "type": "number",
+        "default": 2,
+        "live": true,
+        "preload": true,
+        "description": "Corner radius of the bars.",
+        "range": [0, 16],
+        "unit": "px"
+      },
+      {
+        "name": "range",
+        "attribute": "data-dio-range",
+        "type": "vec2",
+        "default": [-90, -20],
+        "live": true,
+        "preload": true,
+        "description": "Analyzer range in decibels.",
+        "range": [-120, 0]
+      },
+      {
+        "name": "smooth",
+        "attribute": "data-dio-smooth",
+        "type": "number",
+        "default": 0.75,
+        "live": true,
+        "preload": true,
+        "description": "Smoothing of the analyzer over time.",
+        "range": [0, 0.99]
+      },
+      {
+        "name": "mirror",
+        "attribute": "data-dio-mirror",
+        "type": "boolean",
+        "default": false,
+        "live": true,
+        "preload": true,
+        "description": "Bars grow both ways from the middle."
+      },
+      {
+        "name": "seek",
+        "attribute": "data-dio-seek",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "With peaks, a click, a tap or a drag seeks and hover shows the position; off, the waveform only shows progress, for a list where a click opens the episode."
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 20,
+          "medium": 30
+        },
+        "description": "Frame cap while playing.",
+        "range": [1, 60],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "reducedMotion", "size"],
+    "frames": {
+      "policy": "fps",
+      "note": "None while paused; at most fps while playing, then a 0.3 s fall."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "bars, wave and ring hold a calm still shape; peaks works fully."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page transition."
+    },
+    "touch": "A tap on peaks seeks; dragging needs touch-action: pan-y.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 20 fps and 24 bars.",
+        "medium": "At most 30 fps."
+      }
+    },
+    "cost": {
+      "gpu": "One quad drawn by a fragment shader and a 128 x 1 data texture updated per frame.",
+      "memory": "A few kilobytes of analyzer data and peaks.",
+      "chunk": 5541
+    },
+    "examples": [
+      {
+        "title": "Live bars next to a player",
+        "html": "<audio id=\"live\" src=\"/audio/live-set.mp3\" controls=\"\" preload=\"metadata\"></audio><div class=\"bars\" data-dio=\"visualizer\" data-dio-for=\"#live\" aria-hidden=\"true\"></div>"
+      },
+      {
+        "title": "A podcast episode; peaks from audiowaveform -i ep42.mp3 -o ep42.json -z 256 -b 8",
+        "html": "<li class=\"episode\"><audio src=\"https://cdn.example.org/ep42.mp3\" controls=\"\" preload=\"none\"></audio><div data-dio=\"visualizer\" data-dio-style=\"peaks\" data-dio-peaks=\"/peaks/ep42.json\" aria-hidden=\"true\" style=\"touch-action: pan-y\"></div></li>"
+      }
+    ]
+  }
+]

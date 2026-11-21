@@ -20,6 +20,17 @@ export function absolute(url: string, base?: string | URL): string {
   return parsed.href
 }
 
+/**
+ * CORS mode of a texture load. Pixels of another origin fetched without CORS are tainted and the
+ * GPU upload throws SecurityError on every draw, so such a texture is always asked in CORS mode.
+ */
+export function textureCors(url: string, crossOrigin: CrossOrigin): CrossOrigin {
+  if (crossOrigin) return crossOrigin
+  const page = globalThis.location?.origin
+  const target = new URL(url)
+  return page && /^https?:$/.test(target.protocol) && target.origin !== page ? 'anonymous' : ''
+}
+
 /** Lower-case extension of an absolute URL's path, without the dot. '' for none. */
 export const extensionOf = (url: string): string =>
   /\.([a-z0-9]+)$/i.exec(new URL(url).pathname)?.[1]?.toLowerCase() ?? ''

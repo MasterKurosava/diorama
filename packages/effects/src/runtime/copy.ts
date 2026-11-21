@@ -1,5 +1,7 @@
+// A taken copy: the owner's handle on an element's GL copy. Its setters override the box,
+// radius, clip, opacity, presence, veil, draw level and crop the runtime draws it with.
 import type { Object3D } from 'three/webgpu'
-import type { Box, Copy, CopyState, Crop, DrawnBox, TakeOptions } from '../types'
+import type { Box, Copy, CopyState, Crop, DrawnBox, PosedBox, TakeOptions } from '../types'
 import type { Taken } from './inputs'
 import type { LayerImpl } from './layer'
 
@@ -14,9 +16,8 @@ export interface CopyHost {
 }
 
 /** ms without writes after which an unsignalled ghost or veil is abandoned. */
-const NET = 10_000
+const ABANDON_AFTER = 10_000
 
-/** An element's GL copy under an owner. */
 export class CopyImpl implements Copy, Taken {
   readonly element: Element
   readonly ready: Promise<boolean>
@@ -28,12 +29,11 @@ export class CopyImpl implements Copy, Taken {
   readonly compiled: WeakMap<Object3D, boolean> = new WeakMap()
   /** The image last uploaded under the veil. */
   uploaded: unknown
-  /** Groups lifted by `above` with their original renderOrder. `lift` is the offset. */
-  readonly lifted: Map<Object3D, number> = new Map()
-  lift = 0
   readonly #host: CopyHost
   readonly #signal: AbortSignal | undefined
+  /** Settles `ready`; undefined once it has. */
   #settle: ((ready: boolean) => void) | undefined
+  /** The abandon timer. */
   #timer: ReturnType<typeof setTimeout> | undefined
   #box: Box | undefined
   #radius: number | undefined
@@ -67,11 +67,14 @@ export class CopyImpl implements Copy, Taken {
   get drawn(): DrawnBox | undefined {
     return this.layer?.drawn
   }
+  get posed(): PosedBox | undefined {
+    return this.ghost ? undefined : this.layer?.aim
+  }
   get source(): string {
     return this.layer?.media?.src ?? ''
   }
   get effects(): readonly string[] {
-    return this.layer?.insts.map((i) => i.rec.name) ?? []
+    return this.layer?.insts.map((inst) => inst.rec.name) ?? []
   }
   get cssOpacity(): number {
     return this.layer?.inputs.css ?? 1
@@ -90,7 +93,7 @@ export class CopyImpl implements Copy, Taken {
   set box(box: Box | undefined) {
     if (this.released) return
     this.#box = box
-    this.#write()
+    this.#written()
   }
   get radius(): number | undefined {
     return this.#radius
@@ -98,7 +101,7 @@ export class CopyImpl implements Copy, Taken {
   set radius(radius: number | undefined) {
     if (this.released) return
     this.#radius = radius
-    this.#write()
+    this.#written()
   }
   get clip(): Box | undefined {
     return this.#clip
@@ -106,7 +109,7 @@ export class CopyImpl implements Copy, Taken {
   set clip(clip: Box | undefined) {
     if (this.released) return
     this.#clip = clip
-    this.#write()
+    this.#written()
   }
   get opacity(): number {
     return this.#opacity
@@ -114,7 +117,7 @@ export class CopyImpl implements Copy, Taken {
   set opacity(opacity: number) {
     if (this.released) return
     this.#opacity = Math.min(1, Math.max(0, opacity))
-    this.#write()
+    this.#written()
   }
   get presence(): number {
     return this.#presence
@@ -122,7 +125,7 @@ export class CopyImpl implements Copy, Taken {
   set presence(presence: number) {
     if (this.released) return
     this.#presence = Math.min(1, Math.max(0, presence))
-    this.#write()
+    this.#written()
   }
   get veil(): boolean {
     return this.#veil
@@ -132,7 +135,7 @@ export class CopyImpl implements Copy, Taken {
     this.#veil = on
     // A ghost has no DOM, so its veil hides only the copy.
     if (!this.ghost) this.#host.veil(this.element, on)
-    this.#write()
+    this.#written()
   }
   get above(): number {
     return this.#above
@@ -140,7 +143,7 @@ export class CopyImpl implements Copy, Taken {
   set above(level: number) {
     if (this.released) return
     this.#above = Math.max(0, level)
-    this.#write()
+    this.#written()
   }
   get crop(): Crop | undefined {
     return this.#crop
@@ -148,16 +151,19 @@ export class CopyImpl implements Copy, Taken {
   set crop(crop: Crop | undefined) {
     if (this.released) return
     this.#crop = crop
-    this.#write()
+    this.#written()
   }
   cropAt(box: Box): Crop | undefined {
     const layer = this.layer
     const media = layer?.media
-    const [iw, ih] = media?.size() ?? [0, 0]
-    if (!layer || !media || !iw || !ih || !box.width || !box.height) return undefined
-    const c = [1, 1, 0, 0]
-    media.fit(layer.inputs.styles, box.width, box.height, c)
-    const [width = 1, height = 1, x = 0, y = 0] = c
+    const [imageWidth, imageHeight] = media?.size() ?? [0, 0]
+    if (!layer || !media || !imageWidth || !imageHeight || !box.width || !box.height) {
+      return undefined
+    }
+    const crop = [1, 1, 0, 0]
+    media.fit(layer.inputs.styles, box.width, box.height, crop)
+    layer.surface?.frame(crop)
+    const [width = 1, height = 1, x = 0, y = 0] = crop
     return { x, y, width, height }
   }
   get leave(): 'ghost' | 'release' {
@@ -176,7 +182,7 @@ export class CopyImpl implements Copy, Taken {
   haunt(): void {
     this.ghost = true
     if (this.#veil) this.#host.veil(this.element, false)
-    this.#arm()
+    this.#armAbandonTimer()
   }
 
   release(): void {
@@ -198,17 +204,17 @@ export class CopyImpl implements Copy, Taken {
     this.release()
   }
 
-  #write(): void {
-    this.#arm()
+  #written(): void {
+    this.#armAbandonTimer()
     this.#host.invalidate()
   }
 
   /** Restarts the safety net of a copy whose owner gave no signal. */
-  #arm(): void {
+  #armAbandonTimer(): void {
     clearTimeout(this.#timer)
     this.#timer =
       !this.#signal && (this.ghost || this.#veil)
-        ? setTimeout(() => this.#host.abandoned(this), NET)
+        ? setTimeout(() => this.#host.abandoned(this), ABANDON_AFTER)
         : undefined
   }
 }

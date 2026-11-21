@@ -44,6 +44,10 @@ const WEB_DEFAULTS = [
   anchors,
 ] as unknown as readonly AnyPlugin[]
 
+/**
+ * Creates an app with the built-in web layer and the given presets and plugins. Call `start()` to
+ * run it.
+ */
 export function createApp<
   const P extends readonly PresetEntry[] = [],
   const E extends readonly PluginEntry[] = [],

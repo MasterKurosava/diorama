@@ -1,0 +1,110 @@
+{
+  "name": "@dioramajs/model",
+  "version": "0.1.0",
+  "description": "3D objects and glTF models for Diorama: viewer, product box, book, device, exploded view and hotspots.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl",
+    "gltf",
+    "model",
+    "3d"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/model"
+  },
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@dioramajs/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./model": {
+      "@dioramajs/source": "./src/model.ts",
+      "types": "./dist/model.d.ts",
+      "default": "./dist/model.js"
+    },
+    "./device": {
+      "@dioramajs/source": "./src/device.ts",
+      "types": "./dist/device.d.ts",
+      "default": "./dist/device.js"
+    },
+    "./book": {
+      "@dioramajs/source": "./src/book.ts",
+      "types": "./dist/book.d.ts",
+      "default": "./dist/book.js"
+    },
+    "./explode": {
+      "@dioramajs/source": "./src/explode.ts",
+      "types": "./dist/explode.d.ts",
+      "default": "./dist/explode.js"
+    },
+    "./hotspots": {
+      "@dioramajs/source": "./src/hotspots.ts",
+      "types": "./dist/hotspots.d.ts",
+      "default": "./dist/hotspots.js"
+    },
+    "./box": {
+      "@dioramajs/source": "./src/box.ts",
+      "types": "./dist/box.d.ts",
+      "default": "./dist/box.js"
+    },
+    "./coin": {
+      "@dioramajs/source": "./src/coin.ts",
+      "types": "./dist/coin.d.ts",
+      "default": "./dist/coin.js"
+    },
+    "./vinyl": {
+      "@dioramajs/source": "./src/vinyl.ts",
+      "types": "./dist/vinyl.d.ts",
+      "default": "./dist/vinyl.js"
+    },
+    "./label": {
+      "@dioramajs/source": "./src/label.ts",
+      "types": "./dist/label.d.ts",
+      "default": "./dist/label.js"
+    },
+    "./rig": {
+      "@dioramajs/source": "./src/rig.ts",
+      "types": "./dist/rig.d.ts",
+      "default": "./dist/rig.js"
+    },
+    "./meta.json": "./meta.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "meta.json"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc"
+  },
+  "peerDependencies": {
+    "@dioramajs/effects": "workspace:^",
+    "@dioramajs/render": "workspace:^",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@dioramajs/effects": "workspace:*",
+    "@dioramajs/render": "workspace:*",
+    "@types/three": "^0.187.0",
+    "three": "^0.187.0",
+    "tsdown": "0.23.4",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

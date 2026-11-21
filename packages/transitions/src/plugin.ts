@@ -8,24 +8,22 @@ import {
   type Preset,
   type Signal,
   signal,
-} from '@diorama/core'
-import type { Copy, ReleaseRequest } from '@diorama/effects'
-import { DEV, TransitionError } from './errors'
-import { clamp, cubic, hold, lerp, noop, poseOf, sized } from './flight'
+} from '@dioramajs/core'
+import { DEV } from '@dioramajs/core/dev'
+import type { Copy, ReleaseRequest } from '@dioramajs/effects'
+import { keySelector, NATIVE, nativeActive, within } from './dom'
+import { TransitionError } from './errors'
+import { clamp, cubic, hold, lerp, noop, poseOf, sized } from './geometry'
 import { Page, pathOf } from './page'
 import { Pool } from './pool'
 import { stageSheet } from './sheet'
 import {
   type Host,
-  NATIVE,
-  nativeActive,
   type Settings,
   type Source,
-  sel,
   skipped,
   TransitionImpl,
   type View,
-  within,
 } from './transition'
 import type {
   PageScope,
@@ -37,11 +35,11 @@ import type {
   TransitionsOptions,
 } from './types'
 
-// Routers move these into the new page themselves, so they keep their instances.
-const PERSIST = '[data-turbo-permanent],[data-astro-transition-persist]'
-const isStage = (node: Node): boolean =>
-  node.nodeName === 'CANVAS' && (node as Element).hasAttribute('data-dio-canvas')
+// The `transition` plugin. It owns the current transition, and what outlives one: the pool of
+// waiting ghosts, hidden remnants, fades handed over by a superseded transition, page scopes, and
+// auto mode, which flies keyed copies when a router swaps the DOM without calling a transition.
 
+/** A copy kept hidden on an element a flight left from, until a later transition flies back. */
 interface Remnant {
   readonly copy: Copy
   readonly gen: number
@@ -49,15 +47,25 @@ interface Remnant {
   readonly partner: Anchor | undefined
 }
 
+/** A presence or opacity fade the plugin plays on its own clock. */
 interface Fade {
   readonly copy: Copy
   readonly prop: 'opacity' | 'presence'
   readonly from: number
   readonly to: number
+  /** Seconds it takes. */
   readonly span: number
   end: () => void
-  t: number
+  /** Seconds played so far. */
+  time: number
 }
+
+/** Routers move these into the new page themselves, so they keep their instances. */
+const PERSIST = '[data-turbo-permanent],[data-astro-transition-persist]'
+/** A long frame counts as at most this many display frames, so the picture freezes, not jumps. */
+const MAX_FRAMES_PER_STEP = 2
+/** `Node.ELEMENT_NODE`. */
+const ELEMENT_NODE = 1
 
 /** Plugin state: current transition, pool, remnants, page scopes and auto mode. */
 class Director implements Host {
@@ -75,14 +83,17 @@ class Director implements Host {
   readonly #fades = new Set<Fade>()
   readonly #observer: MutationObserver
   readonly #warned = new Set<string>()
+  /** Ghosts taken by auto mode in this reconcile, flown together in a microtask. */
   #batch: Source[] = []
-  #hold: Off | undefined
+  /** Keeps frames coming while anything moves. */
+  #awake: Off | undefined
   #watching = false
   #path: string
+  /** `performance.now()` of the last pathname change. */
   #navigated = Number.NEGATIVE_INFINITY
   // Pathname an explicit transition just left while history still shows it. Astro pushes the new
   // URL after the swap, and that push must not count as a navigation.
-  #behind: string | undefined
+  #leftPath: string | undefined
 
   constructor(app: View, options: Settings) {
     this.app = app
@@ -97,7 +108,7 @@ class Director implements Host {
     // Must be created after the effects observer. That one runs first and only schedules the
     // reconcile, so this one gets to hide arriving targets before effects sees them.
     this.#observer = new MutationObserver((records) => this.#mutated(records))
-    app.system('layout', (t) => this.#frame(t), {
+    app.system('layout', (time) => this.#frame(time), {
       name: 'transition',
       after: 'anchors',
       before: 'effects:inputs',
@@ -110,6 +121,8 @@ class Director implements Host {
       },
       { signal: this.signal },
     )
+    // Its own listener per app: the first one to run stops the click for the others.
+    addEventListener('click', (event) => passClick(event), { capture: true, signal: this.signal })
     stageSheet(app)
     app.onDispose(() => this.#dispose())
     this.watch()
@@ -145,13 +158,13 @@ class Director implements Host {
     old.close((error) => this.app.report(error, 'page'))
     this.page = new Page(url)
     const path = location.pathname
-    this.#behind = pathOf(url) === path ? undefined : path
+    this.#leftPath = pathOf(url) === path ? undefined : path
   }
 
   remnant(copy: Copy, gen: number, partner?: Element): void {
-    const el = copy.element
-    this.#forget(el)
-    if (copy.state === 'released' || !el.isConnected) {
+    const { element } = copy
+    this.#forget(element)
+    if (copy.state === 'released' || !element.isConnected) {
       copy.release()
       return
     }
@@ -160,7 +173,11 @@ class Director implements Host {
     copy.box = copy.radius = copy.clip = undefined
     copy.opacity = copy.presence = 1
     copy.above = 0
-    this.#remnants.set(el, { copy, gen, partner: partner && this.app.anchors.track(partner) })
+    this.#remnants.set(element, {
+      copy,
+      gen,
+      partner: partner && this.app.anchors.track(partner),
+    })
   }
 
   reclaim(element: Element): Copy | undefined {
@@ -175,10 +192,10 @@ class Director implements Host {
   }
 
   prune(gen: number): void {
-    for (const [el, r] of this.#remnants) {
-      if (r.gen >= gen && el.isConnected && r.copy.state !== 'released') continue
-      this.#forget(el)
-      r.copy.release()
+    for (const [element, remnant] of this.#remnants) {
+      if (remnant.gen >= gen && element.isConnected && remnant.copy.state !== 'released') continue
+      this.#forget(element)
+      remnant.copy.release()
     }
   }
 
@@ -193,10 +210,10 @@ class Director implements Host {
   // Not inside a window, whose transition may still fly back to them.
   #restore(): void {
     if (this.current.peek()?.window) return
-    for (const [el, { copy, partner: a }] of this.#remnants) {
-      const hidden = a && a.version > 0 && !sized(a)
-      if (!a || (a.element.isConnected && !hidden)) continue
-      this.#forget(el)
+    for (const [element, { copy, partner }] of this.#remnants) {
+      const hidden = partner && partner.version > 0 && !sized(partner)
+      if (!partner || (partner.element.isConnected && !hidden)) continue
+      this.#forget(element)
       if (copy.state === 'released') continue
       copy.veil = false
       copy.presence = 0
@@ -205,7 +222,7 @@ class Director implements Host {
   }
 
   fade(copy: Copy, prop: 'opacity' | 'presence', to: number, span: number, end: () => void): void {
-    this.#fades.add({ copy, prop, from: copy[prop], to, span, end, t: 0 })
+    this.#fades.add({ copy, prop, from: copy[prop], to, span, end, time: 0 })
     this.app.invalidate()
   }
 
@@ -248,34 +265,38 @@ class Director implements Host {
     else this.#observer.disconnect()
   }
 
-  #frame(t: FrameTime): void {
-    // Cap a long frame (first shader compile, GC pause) at two display frames so the picture
-    // freezes instead of jumping. Offline steps use the exact delta.
+  #frame(time: FrameTime): void {
+    // Cap a long frame (first shader compile, GC pause) so the picture freezes instead of
+    // jumping. Offline steps use the exact delta.
     const { loop } = this.app
-    const most = loop.stats.reason === 'step' ? t.delta : 2 * loop.stats.interval * loop.timeScale
-    const dt = Math.min(t.delta, most)
+    const most =
+      loop.stats.reason === 'step'
+        ? time.delta
+        : MAX_FRAMES_PER_STEP * loop.stats.interval * loop.timeScale
+    const dt = Math.min(time.delta, most)
     let busy = this.current.peek()?.frame(dt) ?? false
     this.#restore()
+    // Fades handed over by superseded transitions play on here.
     for (const fade of this.#fades) {
-      fade.t += dt
-      const k = fade.span > 0 ? clamp(fade.t / fade.span) : 1
-      fade.copy[fade.prop] = lerp(fade.from, fade.to, k)
-      if (k < 1) busy = true
+      fade.time += dt
+      const t = fade.span > 0 ? clamp(fade.time / fade.span) : 1
+      fade.copy[fade.prop] = lerp(fade.from, fade.to, t)
+      if (t < 1) busy = true
       else {
         this.#fades.delete(fade)
         fade.end()
       }
     }
-    if (busy && !this.#hold) this.#hold = this.app.hold('transition')
-    else if (!busy && this.#hold) {
-      this.#hold()
-      this.#hold = undefined
+    if (busy && !this.#awake) this.#awake = this.app.hold('transition')
+    else if (!busy && this.#awake) {
+      this.#awake()
+      this.#awake = undefined
     }
   }
 
   /** Marks a pathname change as a navigation for auto mode. Query and hash don't count. */
-  #nav(): void {
-    if (location.pathname !== this.#behind) this.#behind = undefined
+  #noteNavigation(): void {
+    if (location.pathname !== this.#leftPath) this.#leftPath = undefined
     if (location.pathname === this.#path) return
     this.#path = location.pathname
     this.#navigated = performance.now()
@@ -283,62 +304,63 @@ class Director implements Host {
 
   /** Only takes copies. Transitions open after the reconcile, in #flush. */
   #released(request: ReleaseRequest): void {
-    const el = request.element
-    const key = el.getAttribute('data-dio-key')
-    const cur = this.current.peek()
-    if (cur?.window) {
-      cur.released(request, key)
+    const { element } = request
+    const key = element.getAttribute('data-dio-key')
+    const active = this.current.peek()
+    if (active?.window) {
+      active.released(request, key)
       return
     }
-    this.#nav()
-    if (!this.options.auto || !request.visible || el.closest(PERSIST)) return
+    this.#noteNavigation()
+    if (!this.options.auto || !request.visible || element.closest(PERSIST)) return
     if (key === null) {
-      const seconds = this.#native()
+      // An unkeyed copy fades out with a browser view transition, if one runs.
+      const seconds = this.#nativeFade()
       const copy = seconds > 0 ? request.take({ signal: this.signal }) : undefined
       if (copy) {
         hold(copy, request.drawn)
-        this.#out(copy, seconds, () => copy.release())
+        this.#fadeOut(copy, seconds, () => copy.release())
       }
       return
     }
     // Worth taking only if a partner is already in the document or a navigation just happened.
     const recent = performance.now() - this.#navigated < this.options.grace * 1000
-    if (!recent && !document.querySelector(sel(key))) return
+    if (!recent && !document.querySelector(keySelector(key))) return
     const copy = request.take({ signal: this.signal })
     if (!copy) return
     hold(copy, request.drawn)
-    this.#batch.push({ key, named: false, element: el, copy, pose: request.drawn })
+    this.#batch.push({ key, named: false, element, copy, pose: request.drawn })
     if (this.#batch.length === 1) queueMicrotask(() => this.#flush())
   }
 
   /** After the reconcile. Paired ghosts fly together, the rest go to the pool. */
   #flush(): void {
-    const items = this.#batch.splice(0).filter((s) => s.copy.state !== 'released')
-    const cur = this.current.peek()
-    if (cur?.window) {
-      cur.adopt(items)
+    const items = this.#batch.splice(0).filter((source) => source.copy.state !== 'released')
+    const active = this.current.peek()
+    if (active?.window) {
+      active.adopt(items)
       return
     }
-    const paired = items.filter((s) => document.querySelector(sel(s.key)))
-    const seconds = this.#native()
-    for (const s of items) {
-      if (paired.includes(s)) continue
-      const wait = (): void => this.pool.add(s.key, s.copy)
-      if (seconds > 0) this.#out(s.copy, seconds, wait)
+    const paired = items.filter((source) => document.querySelector(keySelector(source.key)))
+    const seconds = this.#nativeFade()
+    for (const source of items) {
+      if (paired.includes(source)) continue
+      const wait = (): void => this.pool.add(source.key, source.copy)
+      if (seconds > 0) this.#fadeOut(source.copy, seconds, wait)
       else wait()
     }
     if (paired.length) new TransitionImpl(this, {}, true).fly(paired)
   }
 
-  // Unpaired copies in auto mode only fade inside a browser view transition, whose old root
-  // snapshot has holes where they were. Elsewhere they go with their DOM.
-  #native(): number {
+  // Seconds unpaired copies fade in auto mode. They only fade inside a browser view transition,
+  // whose old root snapshot has holes where they were. Elsewhere they go with their DOM.
+  #nativeFade(): number {
     if (!nativeActive()) return 0
     return this.app.stage.reducedMotion.peek() ? NATIVE : (this.options.leave ?? NATIVE)
   }
 
   // Reduced motion fades opacity, since custom effects may animate on u.presence.
-  #out(copy: Copy, seconds: number, then: () => void): void {
+  #fadeOut(copy: Copy, seconds: number, then: () => void): void {
     const prop = this.app.stage.reducedMotion.peek() ? 'opacity' : 'presence'
     this.fade(copy, prop, 0, seconds, then)
   }
@@ -347,9 +369,9 @@ class Director implements Host {
   #partners(added: readonly Element[]): Source[] {
     const found: Source[] = []
     if (!this.pool.size) return found
-    for (const el of added.flatMap((node) => within(node, '[data-dio-key]'))) {
-      const key = el.getAttribute('data-dio-key') as string
-      const ghost = el.isConnected ? this.pool.take(key) : undefined
+    for (const element of added.flatMap((node) => within(node, '[data-dio-key]'))) {
+      const key = element.getAttribute('data-dio-key') as string
+      const ghost = element.isConnected ? this.pool.take(key) : undefined
       const pose = ghost && poseOf(ghost)
       if (ghost && pose)
         found.push({ key, named: false, element: ghost.element, copy: ghost, pose })
@@ -359,39 +381,42 @@ class Director implements Host {
   }
 
   #mutated(records: MutationRecord[]): void {
-    this.#nav()
+    this.#noteNavigation()
+    // Elements added, and whether any was removed. The stage canvas is not a page change.
     let removed = false
     const added: Element[] = []
-    for (const r of records) {
-      for (const node of r.removedNodes) if (node.nodeType === 1 && !isStage(node)) removed = true
-      for (const node of r.addedNodes) {
-        if (node.nodeType === 1 && !isStage(node)) added.push(node as Element)
+    for (const record of records) {
+      for (const node of record.removedNodes) {
+        if (node.nodeType === ELEMENT_NODE && !isStage(node)) removed = true
+      }
+      for (const node of record.addedNodes) {
+        if (node.nodeType === ELEMENT_NODE && !isStage(node)) added.push(node as Element)
       }
     }
     if (!removed && !added.length) return
-    const cur = this.current.peek()
+    const active = this.current.peek()
     let late = this.#partners(added)
     const path = location.pathname
-    if (cur?.window) {
+    if (active?.window) {
       // A window that is still swapping pairs them itself when it settles. An implicit transition
       // would supersede it before the page changed.
-      if (!cur.settled) {
-        cur.adopt(late)
+      if (!active.settled) {
+        active.adopt(late)
         late = []
       }
-      cur.mutated(added)
+      active.mutated(added)
     } else if (
       removed &&
       this.options.auto &&
       path !== pathOf(this.page.url) &&
-      path !== this.#behind
+      path !== this.#leftPath
     ) {
       // Auto mode turns the page when the old DOM goes, not on popstate, since routers change the
       // URL first. Skip the path an explicit transition just left (Astro pushes after its swap).
       this.rotate(location.href)
       this.app.emit('page:enter', { url: this.page.url })
     }
-    cur?.relink(added, removed)
+    active?.relink(added, removed)
     if (removed) {
       this.prune(0)
       this.#restore()
@@ -406,12 +431,33 @@ class Director implements Host {
     this.prune(Number.POSITIVE_INFINITY)
     for (const fade of this.#fades) fade.copy.release()
     this.#fades.clear()
-    for (const s of this.#batch.splice(0)) s.copy.release()
-    this.#hold?.()
+    for (const source of this.#batch.splice(0)) source.copy.release()
+    this.#awake?.()
     this.page.close((error) => this.app.report(error, 'page'))
     this.attr(undefined)
   }
 }
+
+/**
+ * While a view transition runs, Chromium hit-tests every click to <html>, whatever the
+ * pseudo-elements' `pointer-events`, so a link clicked during a page change does nothing on its
+ * own. Such a click ends the transition and goes to the element under the pointer.
+ */
+function passClick(event: MouseEvent): void {
+  const root = document.documentElement
+  const viewTransition = document.activeViewTransition
+  if (!viewTransition || !event.isTrusted || event.target !== root) return
+  event.stopImmediatePropagation()
+  viewTransition.skipTransition()
+  const under = document.elementFromPoint(event.clientX, event.clientY)
+  // The same class, a PointerEvent in Chromium, with the same fields.
+  const Click = event.constructor as typeof MouseEvent
+  if (under && under !== root) under.dispatchEvent(new Click('click', event))
+}
+
+/** The canvas of a stage: the plugin's own DOM, never a page change. */
+const isStage = (node: Node): boolean =>
+  node.nodeName === 'CANVAS' && (node as Element).hasAttribute('data-dio-canvas')
 
 // `leave` and `enter` stay unset. They resolve to 0, or 0.25 s inside a browser view transition.
 const defaults: Settings = {

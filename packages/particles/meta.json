@@ -1,0 +1,1024 @@
+[
+  {
+    "name": "confetti",
+    "module": "particles",
+    "package": "@dioramajs/particles",
+    "import": "@dioramajs/particles/confetti",
+    "builtIn": true,
+    "source": "packages/particles/src/confetti.ts",
+    "category": "celebration",
+    "summary": "A burst of confetti from an element, a shower or fireworks to celebrate a sign-up, an order or a donation.",
+    "looks": "count pieces fly out of the element’s box at angle with spread and speed, slow down in the air, fall with gravity and tumble in 3D, face and back in different shades; ribbons bend, and every piece fades over the last fifth of its life. The rain motion lets the pieces fall from above the viewport over its whole width instead, and fireworks bursts five shells one after another at random points of its upper half. The pieces draw over everything and the element stays as it is.",
+    "target": "any element: a button, a section, a form",
+    "bleed": 100000,
+    "params": [
+      {
+        "name": "trigger",
+        "attribute": "data-dio-trigger",
+        "type": "choice",
+        "default": "click",
+        "values": ["click", "view", "event", "manual"],
+        "live": false,
+        "preload": false,
+        "description": "click, view once on screen, a DOM event, or manual through fire."
+      },
+      {
+        "name": "motion",
+        "attribute": "data-dio-motion",
+        "type": "choice",
+        "default": "burst",
+        "values": ["burst", "rain", "fireworks"],
+        "live": false,
+        "preload": false,
+        "description": "burst fires the pieces out of the element, for a button or a form; rain lets them fall from above the whole viewport for a few seconds, for a thank-you or results page; fireworks bursts shells in every direction over the upper viewport, for a launch or a big win. Rain and fireworks ignore origin, angle and spread."
+      },
+      {
+        "name": "event",
+        "attribute": "data-dio-event",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Name of the DOM event on the element for the event trigger."
+      },
+      {
+        "name": "fire",
+        "attribute": "data-dio-fire",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Every increase fires a burst with the manual trigger.",
+        "range": [0, 10],
+        "step": 1
+      },
+      {
+        "name": "once",
+        "attribute": "data-dio-once",
+        "type": "boolean",
+        "default": false,
+        "live": true,
+        "preload": true,
+        "description": "At most one burst per page."
+      },
+      {
+        "name": "origin",
+        "attribute": "data-dio-origin",
+        "type": "choice",
+        "default": "center",
+        "values": ["center", "edges", "pointer"],
+        "live": false,
+        "preload": false,
+        "description": "center of the box, its edges, or the pointer."
+      },
+      {
+        "name": "count",
+        "attribute": "data-dio-count",
+        "type": "number",
+        "default": 200,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 80,
+          "medium": 140
+        },
+        "description": "Pieces per burst.",
+        "range": [1, 1200],
+        "step": 1
+      },
+      {
+        "name": "angle",
+        "attribute": "data-dio-angle",
+        "type": "number",
+        "default": 90,
+        "live": true,
+        "preload": true,
+        "description": "Direction of the burst; 90 is up.",
+        "range": [0, 360],
+        "unit": "deg"
+      },
+      {
+        "name": "spread",
+        "attribute": "data-dio-spread",
+        "type": "number",
+        "default": 70,
+        "live": true,
+        "preload": true,
+        "description": "Spread around the direction.",
+        "range": [0, 360],
+        "unit": "deg"
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 1400,
+        "live": true,
+        "preload": true,
+        "description": "Initial speed of the pieces.",
+        "range": [100, 4000],
+        "unit": "px/s"
+      },
+      {
+        "name": "gravity",
+        "attribute": "data-dio-gravity",
+        "type": "number",
+        "default": 1600,
+        "live": true,
+        "preload": true,
+        "description": "Gravity in px per second squared.",
+        "range": [0, 5000]
+      },
+      {
+        "name": "decay",
+        "attribute": "data-dio-decay",
+        "type": "number",
+        "default": 1.2,
+        "live": true,
+        "preload": true,
+        "description": "Air drag per second, as in canvas-confetti.",
+        "range": [0, 5]
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 3,
+        "live": true,
+        "preload": true,
+        "description": "Life of a piece.",
+        "range": [0.5, 10],
+        "unit": "s"
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Size of the pieces over a base of 10 px.",
+        "range": [0.2, 4]
+      },
+      {
+        "name": "colors",
+        "attribute": "data-dio-colors",
+        "type": "string",
+        "default": "#ff5a36 #ffd23f #3ec1d3 #7b5cff #ffffff",
+        "live": false,
+        "preload": false,
+        "description": "Colors separated by spaces, any CSS colors."
+      },
+      {
+        "name": "shapes",
+        "attribute": "data-dio-shapes",
+        "type": "choice",
+        "default": "mix",
+        "values": ["mix", "rect", "circle", "ribbon"],
+        "live": false,
+        "preload": false,
+        "description": "mix, rect, circle or ribbon."
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Seed of the randomness.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": ["presence"],
+    "frames": {
+      "policy": "function",
+      "note": "Only while pieces fly; none at rest."
+    },
+    "reducedMotion": {
+      "mode": "off",
+      "note": "Off: neither the module nor the engine loads for it, and the page is unchanged."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "A burst fades with the page as it leaves."
+    },
+    "touch": "A tap fires like a click.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 80 pieces.",
+        "medium": "At most 140 pieces."
+      }
+    },
+    "cost": {
+      "gpu": "One instanced draw for a pool of 1200 pieces.",
+      "memory": "Instance attributes of the pool, under 100 KB.",
+      "chunk": 4305
+    },
+    "examples": [
+      {
+        "title": "On a button; its click still works",
+        "html": "<button type=\"button\" data-dio=\"confetti\" data-dio-count=\"120\">Add to calendar</button>"
+      },
+      {
+        "title": "On a thank-you page, once, when it shows up",
+        "html": "<section class=\"thanks\" data-dio=\"confetti\" data-dio-trigger=\"view\" data-dio-origin=\"edges\"><h1>See you in October!</h1></section>"
+      },
+      {
+        "title": "A shower over the whole page when the order is confirmed",
+        "html": "<section class=\"confirmed\" data-dio=\"confetti\" data-dio-trigger=\"view\" data-dio-motion=\"rain\" data-dio-count=\"400\"><h1>Order confirmed</h1></section>"
+      },
+      {
+        "title": "Fireworks for a launch, fired by the site",
+        "html": "<div class=\"launch\" data-dio=\"confetti\" data-dio-trigger=\"manual\" data-dio-motion=\"fireworks\" data-dio-shapes=\"circle\"></div>",
+        "ts": "app.effects.get(document.querySelector('.launch'), 'confetti').params.fire++"
+      },
+      {
+        "title": "After the site’s own success event",
+        "html": "<form data-dio=\"confetti\" data-dio-trigger=\"event\" data-dio-event=\"signup:done\"><button>Sign up</button></form>"
+      }
+    ]
+  },
+  {
+    "name": "sparkles",
+    "module": "particles",
+    "package": "@dioramajs/particles",
+    "import": "@dioramajs/particles/sparkles",
+    "builtIn": true,
+    "source": "packages/particles/src/sparkles.ts",
+    "category": "celebration",
+    "tags": ["block"],
+    "summary": "Small twinkling sparkles around a badge, a \"new\" label, a premium button or a product highlight.",
+    "looks": "Four-point stars, soft dots or thin lens glints of scale times 30 px twinkle around the element: each grows, turns a little and fades over about duration seconds, spread up to spread px past its edges, some whiter than color. A click bursts count of them out of the pointer and they slow down as they fly. They draw over the page; the element stays DOM and keeps every click.",
+    "target": "any element: a badge, a label, a button, a card, a product photo",
+    "bleed": 160,
+    "params": [
+      {
+        "name": "trigger",
+        "attribute": "data-dio-trigger",
+        "type": "choice",
+        "default": "hover",
+        "values": ["hover", "click", "loop", "view"],
+        "live": false,
+        "preload": false,
+        "description": "hover on hover or focus; click bursts from the pointer; loop nonstop; view once in view."
+      },
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "star",
+        "values": ["star", "dot", "cross"],
+        "live": false,
+        "preload": false,
+        "description": "star draws four-point sparkles; dot draws soft round dots; cross draws thin lens glints."
+      },
+      {
+        "name": "count",
+        "attribute": "data-dio-count",
+        "type": "number",
+        "default": 12,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 8
+        },
+        "description": "Sparkles twinkling at once, or flying out per burst.",
+        "range": [1, 64],
+        "step": 1
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Size of the sparkles over a base of 30 px.",
+        "range": [0.25, 4],
+        "step": 0.05
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ffd75e",
+        "live": true,
+        "preload": true,
+        "description": "Color of the sparkles, any CSS color; some come out whiter."
+      },
+      {
+        "name": "spread",
+        "attribute": "data-dio-spread",
+        "type": "number",
+        "default": 24,
+        "live": true,
+        "preload": true,
+        "description": "How far past the element’s edges sparkles appear and bursts fly.",
+        "range": [0, 120],
+        "unit": "px"
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 1.1,
+        "live": true,
+        "preload": true,
+        "description": "Life of one sparkle.",
+        "range": [0.3, 4],
+        "step": 0.05,
+        "unit": "s"
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 20
+        },
+        "description": "Most frames a second of the loop trigger; 0 freezes it.",
+        "range": [0, 60],
+        "step": 1
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Seed of the randomness.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "width"],
+    "frames": {
+      "policy": "fps",
+      "note": "Only while sparkles live: none at rest for hover, click and view; at most fps a second while on screen for loop."
+    },
+    "reducedMotion": {
+      "mode": "off",
+      "note": "Off: neither the module nor the engine loads for it, and the page is unchanged."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Sparkles fade with the page as it leaves."
+    },
+    "touch": "A tap bursts like a click and starts a few hover sparkles; loop and view work as on desktop.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 8 sparkles and 20 frames a second for loop."
+      }
+    },
+    "cost": {
+      "gpu": "One instanced draw of at most 64 small quads, only while sparkles live.",
+      "memory": "Instance attributes for 64 sparkles, about 3 KB.",
+      "chunk": 2699
+    },
+    "examples": [
+      {
+        "title": "A \"new\" badge that sparkles on hover",
+        "html": "<span class=\"badge\" data-dio=\"sparkles\" data-dio-scale=\"0.75\" data-dio-spread=\"14\">New</span>"
+      },
+      {
+        "title": "A premium button bursting with stars on click; the link still opens",
+        "html": "<a class=\"button\" href=\"/pro\" data-dio=\"sparkles\" data-dio-trigger=\"click\" data-dio-count=\"16\">Go Pro</a>"
+      },
+      {
+        "title": "A highlighted product with soft ambient glints",
+        "html": "<figure class=\"pick\" data-dio=\"sparkles\" data-dio-trigger=\"loop\" data-dio-style=\"cross\" data-dio-color=\"#ffffff\" data-dio-count=\"6\"><img src=\"/media/lamp.jpg\" alt=\"Brass desk lamp\"><figcaption>Editor’s pick</figcaption></figure>"
+      },
+      {
+        "title": "A reward on a kids’ learning page, once it scrolls into view",
+        "html": "<section class=\"reward\" data-dio=\"sparkles\" data-dio-trigger=\"view\" data-dio-style=\"dot\" data-dio-count=\"24\"><h2>Level complete!</h2></section>"
+      }
+    ]
+  },
+  {
+    "name": "snow",
+    "module": "particles",
+    "package": "@dioramajs/particles",
+    "import": "@dioramajs/particles/snow",
+    "builtIn": true,
+    "source": "packages/particles/src/snow.ts",
+    "category": "celebration",
+    "tags": ["background"],
+    "summary": "Snow, cherry petals or autumn leaves drifting down over a section or the whole page, for a seasonal campaign.",
+    "looks": "Soft round flakes fall at different depths: far ones small, slow and faint, near ones larger, faster and softer, as if out of focus. They sway as they fall, drift with the wind and move aside around the pointer. The petals style lets pink petals tumble and flip on their way down, and leaves turns them into pointed autumn leaves with a darker midrib. With pile set, a soft drift of snow builds up along the bottom edge and the flakes settle into it. Everything draws over the page and clicks go through to it.",
+    "target": "any element, such as a hero or a banner, or <body> for the whole page; it is never hidden",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "snow",
+        "values": ["snow", "petals", "leaves"],
+        "live": false,
+        "preload": false,
+        "description": "snow drops soft round flakes; petals tumble pink petals; leaves drops autumn leaves."
+      },
+      {
+        "name": "count",
+        "attribute": "data-dio-count",
+        "type": "number",
+        "default": 160,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 70,
+          "medium": 110
+        },
+        "description": "Flakes over the element or the viewport.",
+        "range": [0, 1500],
+        "step": 1
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Size of the flakes over their base size.",
+        "range": [0.3, 3]
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "How fast the flakes fall; 0 holds them in the air.",
+        "range": [0, 3]
+      },
+      {
+        "name": "wind",
+        "attribute": "data-dio-wind",
+        "type": "number",
+        "default": 0.2,
+        "live": true,
+        "preload": true,
+        "description": "Sideways drift: positive to the right, negative to the left.",
+        "range": [-2, 2]
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Colors of the flakes, any CSS colors separated by spaces; empty uses the style’s own."
+      },
+      {
+        "name": "pile",
+        "attribute": "data-dio-pile",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Height of the drift that builds up at the bottom edge, snow only; 0 for none.",
+        "range": [0, 80],
+        "unit": "px"
+      },
+      {
+        "name": "push",
+        "attribute": "data-dio-push",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "How far the pointer pushes nearby flakes aside; 0 leaves them alone.",
+        "range": [0, 1]
+      },
+      {
+        "name": "fps",
+        "attribute": "data-dio-fps",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 24
+        },
+        "description": "Most frames a second the snowfall draws; 0 holds it still.",
+        "range": [0, 60],
+        "step": 1
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Positions, sizes and colors of the flakes.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "height", "hover", "pointerWorld", "presence", "width", "x", "y"],
+    "frames": {
+      "policy": "fps",
+      "note": "Up to fps frames a second while the element is on screen, none off screen or at fps 0; the pointer draws at full rate while it pushes."
+    },
+    "reducedMotion": {
+      "mode": "off",
+      "note": "Off: neither the module nor the engine loads for it, and the page is unchanged."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page as it leaves."
+    },
+    "touch": "Flakes move aside from a finger on the element; scrolling works as usual.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 70 flakes and 24 frames a second.",
+        "medium": "At most 110 flakes."
+      }
+    },
+    "cost": {
+      "gpu": "One instanced draw of small quads over the element or the viewport.",
+      "memory": "Three instance buffers of 1501 entries, about 72 KB.",
+      "chunk": 2824
+    },
+    "examples": [
+      {
+        "title": "Over a winter sale banner",
+        "html": "<section class=\"sale\" data-dio=\"snow\" data-dio-pile=\"24\"><h2>Winter sale: 30% off outerwear</h2><a href=\"/sale\">Shop the sale</a></section>"
+      },
+      {
+        "title": "Over the whole page, from code or with data-dio=\"snow\" on the body",
+        "html": "<main><h1>Holiday gift guide</h1></main>",
+        "ts": "app.attach(document.body, 'snow', { count: 120, wind: -0.3 })"
+      },
+      {
+        "title": "Cherry petals for a spring collection",
+        "html": "<header class=\"spring\" data-dio=\"snow\" data-dio-style=\"petals\" data-dio-count=\"60\" data-dio-wind=\"0.6\"><h1>Spring collection</h1></header>"
+      },
+      {
+        "title": "Leaves in brand colors",
+        "html": "<section class=\"autumn\" data-dio=\"snow\" data-dio-style=\"leaves\" data-dio-color=\"#c2410c #f59e0b var(--brand)\"><h2>Autumn menu</h2></section>"
+      }
+    ]
+  },
+  {
+    "name": "emoji",
+    "module": "particles",
+    "package": "@dioramajs/particles",
+    "import": "@dioramajs/particles/emoji",
+    "builtIn": true,
+    "source": "packages/particles/src/emoji.ts",
+    "category": "celebration",
+    "tags": ["block"],
+    "summary": "Emoji or small pictures that float up from a like button, burst out of a success state or rain over a section.",
+    "looks": "count emoji pop in with a slight overshoot and fly for duration, then fade and shrink over the last third of their life. float sends them up from the top of the element in a gentle stream, swaying and rocking, like reactions on a live stream; burst throws them out of the box in every direction, slowed by the air; fountain shoots them up in a cone and lets them fall back; rain lets them fall through the element’s part of the viewport over its width. Every emoji keeps moving with the page as it scrolls. The list is drawn once with the system emoji font, so the emoji look native on every device; pictures of the list are drawn the same way. The element stays as it is.",
+    "target": "any element: a like or reaction button, a form, a section",
+    "bleed": 100000,
+    "params": [
+      {
+        "name": "trigger",
+        "attribute": "data-dio-trigger",
+        "type": "choice",
+        "default": "click",
+        "values": ["click", "view", "event", "manual", "interval"],
+        "live": false,
+        "preload": false,
+        "description": "click; view once half the element is on screen; a DOM event; manual through fire; interval, an emission every interval seconds while the element is on screen."
+      },
+      {
+        "name": "motion",
+        "attribute": "data-dio-motion",
+        "type": "choice",
+        "default": "float",
+        "values": ["float", "burst", "rain", "fountain"],
+        "live": false,
+        "preload": false,
+        "description": "float rises from the element, for likes and reactions; burst flies out of it all round, for a success state; fountain shoots up and falls back, for a win or a reward; rain falls over the element from its top, for a seasonal section or a thank-you page."
+      },
+      {
+        "name": "emoji",
+        "attribute": "data-dio-emoji",
+        "type": "string",
+        "default": "❤️",
+        "live": false,
+        "preload": false,
+        "description": "Emoji, symbols or words separated by spaces; a run of emoji without spaces counts as one each. A URL or a file name ending in .svg, .png, .webp and the like is a picture. Up to 16 different items; each emoji picks one at random."
+      },
+      {
+        "name": "event",
+        "attribute": "data-dio-event",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Name of the DOM event on the element for the event trigger; its detail may pick one emoji of the list and a count up to count."
+      },
+      {
+        "name": "fire",
+        "attribute": "data-dio-fire",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Every increase emits once with the manual trigger.",
+        "range": [0, 10],
+        "step": 1
+      },
+      {
+        "name": "once",
+        "attribute": "data-dio-once",
+        "type": "boolean",
+        "default": false,
+        "live": true,
+        "preload": true,
+        "description": "At most one emission per page."
+      },
+      {
+        "name": "origin",
+        "attribute": "data-dio-origin",
+        "type": "choice",
+        "default": "center",
+        "values": ["center", "pointer"],
+        "live": false,
+        "preload": false,
+        "description": "center: out of the box; pointer: from the click or the pointer. Rain ignores it."
+      },
+      {
+        "name": "count",
+        "attribute": "data-dio-count",
+        "type": "number",
+        "default": 8,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 12,
+          "medium": 24
+        },
+        "description": "Emoji per emission; 0 emits none.",
+        "range": [0, 300],
+        "step": 1
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Size of the emoji over a base of 32 px, give or take a fifth.",
+        "range": [0.25, 5]
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Speed of the motion as a factor; 0 pops the emoji in place.",
+        "range": [0, 3]
+      },
+      {
+        "name": "spread",
+        "attribute": "data-dio-spread",
+        "type": "number",
+        "default": 40,
+        "live": true,
+        "preload": true,
+        "description": "Width of the cone for float and fountain; burst flies all round.",
+        "range": [0, 360],
+        "unit": "deg"
+      },
+      {
+        "name": "sway",
+        "attribute": "data-dio-sway",
+        "type": "number",
+        "default": 12,
+        "live": true,
+        "preload": true,
+        "description": "Side to side sway; 0 flies straight.",
+        "range": [0, 80],
+        "unit": "px"
+      },
+      {
+        "name": "spin",
+        "attribute": "data-dio-spin",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Rocking and spin as a factor; 0 keeps the emoji upright.",
+        "range": [0, 4]
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 2.4,
+        "live": true,
+        "preload": true,
+        "description": "Life of an emoji.",
+        "range": [0.4, 8],
+        "unit": "s"
+      },
+      {
+        "name": "interval",
+        "attribute": "data-dio-interval",
+        "type": "number",
+        "default": 1.5,
+        "live": true,
+        "preload": true,
+        "description": "Time between two emissions of the interval trigger; 0 stops them.",
+        "range": [0, 10],
+        "unit": "s"
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Seed of the randomness.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": ["height", "presence", "width", "x", "y"],
+    "frames": {
+      "policy": "function",
+      "note": "Only while emoji fly; none at rest. The interval trigger pauses while the element is off screen."
+    },
+    "reducedMotion": {
+      "mode": "off",
+      "note": "Off: neither the module nor the engine loads for it, and the page is unchanged."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "The emoji fade with the page as it leaves."
+    },
+    "touch": "A tap emits like a click.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 12 emoji an emission.",
+        "medium": "At most 24 emoji an emission."
+      }
+    },
+    "cost": {
+      "gpu": "One instanced draw for a pool of 300 emoji.",
+      "memory": "A glyph atlas of at most 1024 x 1024 px and the pool’s attributes, about 15 KB.",
+      "chunk": 4559
+    },
+    "examples": [
+      {
+        "title": "Hearts float up from a like button; its click still counts",
+        "html": "<button type=\"button\" class=\"like\" data-dio=\"emoji\" aria-pressed=\"false\">Like</button>"
+      },
+      {
+        "title": "A burst after a purchase, from the confirmation",
+        "html": "<section class=\"paid\" data-dio=\"emoji\" data-dio-trigger=\"view\" data-dio-motion=\"burst\" data-dio-emoji=\"🎉 🥳 ✨\" data-dio-count=\"24\" data-dio-once=\"true\"><h1>Payment received</h1></section>"
+      },
+      {
+        "title": "Pumpkins raining over a seasonal section",
+        "html": "<section class=\"halloween\" data-dio=\"emoji\" data-dio-trigger=\"interval\" data-dio-motion=\"rain\" data-dio-emoji=\"🎃 🦇 🍬\" data-dio-count=\"6\" data-dio-interval=\"1.2\" data-dio-scale=\"0.9\"><h2>Halloween sale</h2></section>"
+      },
+      {
+        "title": "Reactions from other viewers, sent by the site",
+        "html": "<div class=\"reactions\" data-dio=\"emoji\" data-dio-trigger=\"event\" data-dio-event=\"reaction\" data-dio-emoji=\"👍 ❤️ 😂 😮\" data-dio-count=\"3\"></div>",
+        "ts": "document.querySelector('.reactions')?.dispatchEvent(new CustomEvent('reaction', { detail: { emoji: '😂', count: 1 } }))"
+      },
+      {
+        "title": "The site’s own icon in a fountain",
+        "html": "<button type=\"button\" data-dio=\"emoji\" data-dio-motion=\"fountain\" data-dio-emoji=\"/icons/star.svg\" data-dio-count=\"16\">Claim reward</button>"
+      }
+    ]
+  },
+  {
+    "name": "drops",
+    "module": "particles",
+    "package": "@dioramajs/particles",
+    "import": "@dioramajs/particles/drops",
+    "builtIn": true,
+    "source": "packages/particles/src/drops.ts",
+    "category": "celebration",
+    "tags": ["background", "transition"],
+    "summary": "Water drops on glass over a hero or the whole page: rain that beads and runs, or meltwater left by a thaw.",
+    "looks": "Drops sit on an invisible pane of glass over the page. Small ones rest as beads; heavy ones run down in fits and starts, wander a little, swallow the beads in their way and leave a wet trail with a few beads behind it, which dries over a few seconds. Each drop catches the light in a bright point near its top, glows faintly along its lower edge and darkens at its rim, like a small lens. In rain motion new drops land all the time. In thaw motion the drops appear behind a front that spreads outwards from a point, as if the glass were melting there, and then run down. Nothing behind the drops is read, so the page stays real and clicks go through.",
+    "target": "any element, such as a hero or a banner, or <body> for the whole viewport; it is never hidden",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "motion",
+        "attribute": "data-dio-motion",
+        "type": "choice",
+        "default": "rain",
+        "values": ["rain", "thaw"],
+        "live": false,
+        "preload": false,
+        "description": "rain: drops land all over the area at rate a second; thaw: count drops appear behind a front that spreads from x, y over duration, like meltwater."
+      },
+      {
+        "name": "trigger",
+        "attribute": "data-dio-trigger",
+        "type": "choice",
+        "default": "view",
+        "values": ["view", "manual"],
+        "live": false,
+        "preload": false,
+        "description": "view: the first time the element is on screen a thaw plays, or rain lands count drops at once and keeps falling while it is on screen; manual: each increase of fire plays a thaw, or a shower of count drops."
+      },
+      {
+        "name": "fire",
+        "attribute": "data-dio-fire",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "With trigger manual, every increase plays once more.",
+        "range": [0, 100],
+        "step": 1
+      },
+      {
+        "name": "rate",
+        "attribute": "data-dio-rate",
+        "type": "number",
+        "default": 10,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 2
+        },
+        "description": "Rain: new drops a second over the area; 0 lets the drops on the glass dry.",
+        "range": [0, 40]
+      },
+      {
+        "name": "count",
+        "attribute": "data-dio-count",
+        "type": "number",
+        "default": 140,
+        "live": true,
+        "preload": true,
+        "caps": {
+          "low": 70
+        },
+        "description": "Drops a thaw leaves behind its front, or rain lands at once when it starts and on each fire.",
+        "range": [0, 400],
+        "step": 1
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Size of the drops over their base size.",
+        "range": [0.4, 3]
+      },
+      {
+        "name": "speed",
+        "attribute": "data-dio-speed",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "How fast heavy drops run down; 0 keeps every drop where it landed.",
+        "range": [0, 3]
+      },
+      {
+        "name": "trail",
+        "attribute": "data-dio-trail",
+        "type": "number",
+        "default": 0.6,
+        "live": true,
+        "preload": true,
+        "description": "Strength of the wet trail a running drop leaves; 0 leaves none.",
+        "range": [0, 1]
+      },
+      {
+        "name": "dry",
+        "attribute": "data-dio-dry",
+        "type": "number",
+        "default": 8,
+        "live": true,
+        "preload": true,
+        "description": "Seconds a trail takes to dry; beads at rest last about half as long.",
+        "range": [0.5, 20],
+        "unit": "s"
+      },
+      {
+        "name": "merge",
+        "attribute": "data-dio-merge",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Drops that touch run together into one bigger drop."
+      },
+      {
+        "name": "x",
+        "attribute": "data-dio-x",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Thaw: where it starts, from the left edge of the area.",
+        "range": [0, 1]
+      },
+      {
+        "name": "y",
+        "attribute": "data-dio-y",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Thaw: where it starts, from the top edge of the area.",
+        "range": [0, 1]
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 2.4,
+        "live": true,
+        "preload": true,
+        "description": "Thaw: seconds the front takes to cross the area. The same as frost’s duration, the drops follow its thaw.",
+        "range": [0.3, 10],
+        "unit": "s"
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ffffff",
+        "live": true,
+        "preload": true,
+        "description": "Color of the light the drops catch along their lower edge."
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Where the drops land and how they run.",
+        "range": [1, 100],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "height", "presence", "width", "x", "y"],
+    "frames": {
+      "policy": "fps",
+      "note": "Every frame while drops run or a thaw spreads, 15 a second while only beads and trails dry, none once the glass is dry. Rain draws as long as it falls."
+    },
+    "reducedMotion": {
+      "mode": "off",
+      "note": "Off: neither the module nor the engine loads for it, and the page is unchanged."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page as it leaves."
+    },
+    "touch": "Nothing to touch: drops ignore the pointer, and scrolling works as usual.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "At most 240 drops, 70 for a thaw, 2 a second of rain, 30 frames a second."
+      }
+    },
+    "cost": {
+      "gpu": "Two instanced draws of small quads, drops and trail pieces; nothing full screen.",
+      "memory": "Instance buffers for 480 drops and 1600 trail pieces, about 54 KB.",
+      "chunk": 4483
+    },
+    "examples": [
+      {
+        "title": "Rain on the window over a hero",
+        "html": "<header class=\"hero\" data-dio=\"drops\" data-dio-rate=\"6\"><h1>Autumn in the city</h1></header>"
+      },
+      {
+        "title": "Meltwater after a frozen page thaws from the button that was pressed",
+        "html": "<div class=\"window\" data-dio=\"frost drops\" data-dio-drops-motion=\"thaw\" data-dio-drops-trigger=\"manual\" style=\"position: fixed; inset: 0; pointer-events: none\"></div>",
+        "ts": "const pane = document.querySelector('.window')\npane.dataset.dioFrostCover = '0'\npane.dataset.dioDropsFire = '1'"
+      },
+      {
+        "title": "Condensation on a cold drink, beads only",
+        "html": "<figure class=\"drink\" data-dio=\"drops\" data-dio-rate=\"0\" data-dio-count=\"160\" data-dio-speed=\"0\"><img src=\"/menu/lemonade.avif\" alt=\"Iced lemonade in a tall glass\"></figure>"
+      }
+    ]
+  }
+]

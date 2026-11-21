@@ -8,6 +8,7 @@ export interface Depth {
   value: number
 }
 
+/** Emits and hook calls nested deeper than this are reported as RECURSION and skipped. */
 export const MAX_DEPTH = 64
 
 interface Listener {
@@ -18,6 +19,7 @@ interface Listener {
   off: Off
 }
 
+/** Event listeners by name. Errors in listeners are reported and never reach the emitter. */
 export class EventBus {
   // Lists are copied on write, so a running emit keeps iterating its own snapshot.
   readonly #channels = new Map<string, Listener[]>()
@@ -31,16 +33,16 @@ export class EventBus {
 
   on(name: string, fn: (payload: unknown) => unknown, owner: Owner, once: boolean): Off {
     if (!owner.open()) return noop
-    const entry: Listener = { fn, owner, once, active: true, off: noop }
-    this.#channels.set(name, [...(this.#channels.get(name) ?? []), entry])
-    entry.off = owner.add(() => {
-      if (!entry.active) return
-      entry.active = false
-      const rest = (this.#channels.get(name) ?? []).filter((e) => e !== entry)
+    const listener: Listener = { fn, owner, once, active: true, off: noop }
+    this.#channels.set(name, [...(this.#channels.get(name) ?? []), listener])
+    listener.off = owner.add(() => {
+      if (!listener.active) return
+      listener.active = false
+      const rest = (this.#channels.get(name) ?? []).filter((other) => other !== listener)
       if (rest.length) this.#channels.set(name, rest)
       else this.#channels.delete(name)
     })
-    return entry.off
+    return listener.off
   }
 
   emit(name: string, payload: unknown): void {
@@ -57,16 +59,17 @@ export class EventBus {
     }
     this.#depth.value++
     try {
-      for (const entry of list) {
+      for (const listener of list) {
         // `active` skips listeners removed earlier in this same delivery.
-        if (!entry.active || entry.owner.disposed) continue
-        if (entry.once) entry.off()
+        if (!listener.active || listener.owner.disposed) continue
+        if (listener.once) listener.off()
         try {
-          const result = entry.fn(payload)
-          if (isThenable(result))
-            result.then(undefined, (e) => this.#report(e, 'listener', entry.owner, name))
-        } catch (e) {
-          this.#report(e, 'listener', entry.owner, name)
+          const result = listener.fn(payload)
+          if (isThenable(result)) {
+            result.then(undefined, (error) => this.#report(error, 'listener', listener.owner, name))
+          }
+        } catch (error) {
+          this.#report(error, 'listener', listener.owner, name)
         }
       }
     } finally {

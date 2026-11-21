@@ -1,6 +1,8 @@
-import { type Off, type Signal, signal } from '@diorama/core'
-import type { RenderApi } from '@diorama/render'
-import { AssetError, isAbort, noop } from './errors'
+// The asset cache: one entry per key, shared by every lease on it. An entry loads once through
+// the queue, then lives while any lease does; after the last one it is retained by size or freed.
+import { type Off, type Signal, signal } from '@dioramajs/core'
+import type { RenderApi } from '@dioramajs/render'
+import { AssetError, isAbort, linked, noop } from './errors'
 import { abortError, type Queue, RANK } from './queue'
 import type {
   Asset,
@@ -93,8 +95,8 @@ class Entry implements Item {
 
 /** Unknown sizes weigh ESTIMATE. At 0 bytes `retain` would keep them forever. */
 const estimate = (value: unknown): number => {
-  const v = value as { byteLength?: number; width?: number; height?: number } | null
-  return v?.byteLength || (v?.width ?? 0) * (v?.height ?? 0) * 4 || ESTIMATE
+  const sized = value as { byteLength?: number; width?: number; height?: number } | null
+  return sized?.byteLength || (sized?.width ?? 0) * (sized?.height ?? 0) * 4 || ESTIMATE
 }
 
 const failure = (lease: Lease): unknown => (lease.wrap ? lease.entry.error : lease.entry.cause)
@@ -148,7 +150,7 @@ export class Cache {
     entry.leases.delete(lease)
     if (lease.status.peek() === 'loading') {
       lease.reject(
-        new AssetError('ASSET_ABORTED', 'released before ready', { url: entry.spec.url }),
+        linked(new AssetError('ASSET_ABORTED', 'released before ready', { url: entry.spec.url })),
       )
     }
     lease.status.value = 'released'
@@ -177,9 +179,9 @@ export class Cache {
     const all = [...this.#entries.values(), ...this.#stale]
     return {
       entries: all.length,
-      used: all.filter((e) => e.leases.size > 0).length,
+      used: all.filter((entry) => entry.leases.size > 0).length,
       retained: this.#bytes(),
-      pending: all.filter((e) => e.state === 'loading').length,
+      pending: all.filter((entry) => entry.state === 'loading').length,
     }
   }
 
@@ -292,6 +294,7 @@ export class Cache {
     }) as unknown as Asset<T, E>
   }
 
+  /** Loads the entry once its loader resolves and a request slot is free. */
   async #run(entry: Entry): Promise<void> {
     const { spec } = entry
     const { signal } = entry.abort
@@ -325,13 +328,14 @@ export class Cache {
       free?.()
       // Released meanwhile. Nobody waits and nothing is reported.
       if (signal.aborted || entry.leases.size === 0) return
-      const error =
+      const error = linked(
         cause instanceof AssetError
           ? cause
           : new AssetError(isAbort(cause) ? 'ASSET_ABORTED' : 'ASSET_PARSE', String(cause), {
               url: spec.url,
               cause,
-            })
+            }),
+      )
       entry.cause = cause
       entry.error = error
       entry.state = 'failed'
@@ -400,13 +404,13 @@ export class Cache {
           entry.loaded = Math.min(size, entry.total)
           wave.changed()
         }
-        const out = new Uint8Array(size)
-        let at = 0
+        const body = new Uint8Array(size)
+        let offset = 0
         for (const chunk of chunks) {
-          out.set(chunk, at)
-          at += chunk.byteLength
+          body.set(chunk, offset)
+          offset += chunk.byteLength
         }
-        return out.buffer
+        return body.buffer
       },
       async decode(work) {
         free()

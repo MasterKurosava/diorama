@@ -125,7 +125,8 @@ export function rootOf(node: Ast | null | undefined): Ast | undefined {
 export const rootName = (accessor: Ast): string => accessor.property.split('.')[0] as string
 
 export const ownerFn = (node: Ast): string | undefined => {
-  for (let p = node.parent; p; p = p.parent) if (p.isFunctionDeclaration) return p.name
+  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent)
+    if (ancestor.isFunctionDeclaration) return ancestor.name
   return undefined
 }
 

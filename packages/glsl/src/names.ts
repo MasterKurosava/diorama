@@ -1,5 +1,5 @@
 // Naming conventions shared by the converter, the CLI and the runtime.
-import type { OptionName, ReservedParam } from '@diorama/effects'
+import type { OptionName, ReservedParam } from '@dioramajs/effects'
 import { RESERVED_ATTRS } from './effect-name'
 import type { GlslCode, GlslType, ShaderInput } from './types'
 
@@ -46,9 +46,11 @@ export const RESERVED: ReadonlySet<string> = new Set(
     animate: 0,
     rebuild: 0,
     media: 0,
+    burst: 0,
     reducedMotion: 0,
     on: 0,
     bleed: 0,
+    quality: 0,
   } satisfies Record<ReservedParam | OptionName, unknown>),
 )
 
@@ -69,12 +71,14 @@ const MEDIA = new Set(['texture', 'tex', 'map', 'image', 'diffuse', 'tDiffuse', 
  * and `uRGBShift` is `rgbShift`.
  */
 export function normalizeName(name: string, dialect: Dialect = 'three'): string {
-  let n = name
-  if (dialect === 'shadertoy' && /^i[A-Z]/.test(n)) n = n.slice(1)
-  else if (n.startsWith('u_')) n = n.slice(2)
-  else if (/^u[A-Z]/.test(n)) n = n.slice(1)
-  n = n.replace(/_+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase()).replace(/_+$/, '')
-  return n.replace(/^[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|^[A-Z]/, (s) => s.toLowerCase())
+  let normalized = name
+  if (dialect === 'shadertoy' && /^i[A-Z]/.test(normalized)) normalized = normalized.slice(1)
+  else if (normalized.startsWith('u_')) normalized = normalized.slice(2)
+  else if (/^u[A-Z]/.test(normalized)) normalized = normalized.slice(1)
+  normalized = normalized
+    .replace(/_+([a-zA-Z0-9])/g, (_, c: string) => c.toUpperCase())
+    .replace(/_+$/, '')
+  return normalized.replace(/^[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|^[A-Z]/, (s) => s.toLowerCase())
 }
 
 export const isMediaName = (normalized: string): boolean => MEDIA.has(normalized)
@@ -170,7 +174,8 @@ const conventions: [readonly string[], Convention][] = [
   [['motion'], { input: 'motion', types: { float: 'motion' } }],
 ]
 const byName = new Map<string, Convention>()
-for (const [names, convention] of conventions) for (const n of names) byName.set(n, convention)
+for (const [names, convention] of conventions)
+  for (const name of names) byName.set(name, convention)
 
 export const conventionOf = (normalized: string): Convention | undefined => byName.get(normalized)
 

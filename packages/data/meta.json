@@ -1,0 +1,745 @@
+[
+  {
+    "name": "chart",
+    "module": "data",
+    "package": "@dioramajs/data",
+    "import": "@dioramajs/data/chart",
+    "builtIn": true,
+    "source": "packages/data/src/chart.ts",
+    "category": "data",
+    "tags": ["scroll"],
+    "summary": "A plain HTML table or definition list drawn as an animated chart that grows in on scroll.",
+    "looks": "The numbers of the table become bars, columns, a line or an area in the table box, with quiet gridlines, category labels and value ticks in the text color of the table. When a third of the chart is in view the marks grow from the baseline one after another. The pointer over a category dims the others and shows a tooltip with the values as written in the cells.",
+    "target": "a `<table>` (first column labels, a header row naming each value column) or a `<dl>` of `<dt>` labels and `<dd>` values, sized with CSS",
+    "on": "table, dl",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "bar",
+        "values": ["bar", "column", "line", "area"],
+        "live": false,
+        "preload": false,
+        "description": "Kind of chart: bar draws horizontal bars, for long labels and rankings; column draws vertical bars, for a few periods; line draws a line per column, for trends over time; area fills under each line, for volumes over time."
+      },
+      {
+        "name": "colors",
+        "attribute": "data-dio-colors",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Series colors in column order, separated by spaces; empty uses a colorblind-safe set."
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Time one mark takes to grow in.",
+        "range": [0, 3],
+        "step": 0.05,
+        "unit": "s"
+      },
+      {
+        "name": "stagger",
+        "attribute": "data-dio-stagger",
+        "type": "number",
+        "default": 0.06,
+        "live": true,
+        "preload": true,
+        "description": "Delay between neighboring marks as they grow in; 0 grows them all at once.",
+        "range": [0, 0.3],
+        "step": 0.01,
+        "unit": "s"
+      },
+      {
+        "name": "grid",
+        "attribute": "data-dio-grid",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Draws faint gridlines at the value ticks behind the marks."
+      },
+      {
+        "name": "labels",
+        "attribute": "data-dio-labels",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Draws category labels, value ticks and bar values; off leaves bare marks."
+      },
+      {
+        "name": "max",
+        "attribute": "data-dio-max",
+        "type": "number",
+        "default": "auto",
+        "live": false,
+        "preload": false,
+        "description": "Top of the value axis, for charts compared on one scale; auto picks a round value above the largest one.",
+        "range": [1, 1000000],
+        "step": 1
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "reducedMotion", "width", "y"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while the marks grow in and for a few frames as a hovered category fades in or out; none at rest."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "The chart stands complete from the first frame; hover and the tooltip still work."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page."
+    },
+    "touch": "A tap on a category shows its tooltip, a tap elsewhere hides it. Nothing else changes.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "Two to four draw calls: the labels texture, all bars as one instanced call, or the lines, areas and hover dots.",
+      "memory": "One canvas texture the size of the box at up to 2x pixel ratio, plus a few bytes per value.",
+      "chunk": 6817
+    },
+    "examples": [
+      {
+        "title": "Revenue by quarter as columns",
+        "html": "<table class=\"chart\" data-dio=\"chart\" data-dio-style=\"column\"><caption>Revenue, 2026</caption><thead><tr><th>Quarter</th><th>Revenue</th></tr></thead><tbody><tr><th>Q1</th><td>$1.2M</td></tr><tr><th>Q2</th><td>$1.6M</td></tr><tr><th>Q3</th><td>$2.1M</td></tr><tr><th>Q4</th><td>$2.4M</td></tr></tbody></table>"
+      },
+      {
+        "title": "A ranking from a definition list",
+        "html": "<dl class=\"chart\" data-dio=\"chart\"><dt>Programs</dt><dd>78%</dd><dt>Fundraising</dt><dd>14%</dd><dt>Administration</dt><dd>8%</dd></dl>"
+      },
+      {
+        "title": "Two series as lines with custom colors",
+        "html": "<table class=\"chart\" data-dio=\"chart\" data-dio-style=\"line\" data-dio-colors=\"#2563eb #f59e0b\"><thead><tr><th>Month</th><th>Signups</th><th>Churn</th></tr></thead><tbody><tr><th>Jan</th><td>1,240</td><td>310</td></tr><tr><th>Feb</th><td>1,580</td><td>290</td></tr><tr><th>Mar</th><td>2,030</td><td>275</td></tr></tbody></table>"
+      }
+    ],
+    "children": [
+      {
+        "attribute": "data-dio-value",
+        "description": "Exact value of a cell whose text is not a plain number, such as \"about half\"."
+      }
+    ],
+    "parts": [
+      {
+        "name": "tooltip",
+        "description": "The tooltip with the hovered category and its values as written in the cells."
+      }
+    ]
+  },
+  {
+    "name": "graph",
+    "module": "data",
+    "package": "@dioramajs/data",
+    "import": "@dioramajs/data/graph",
+    "builtIn": true,
+    "source": "packages/data/src/graph.ts",
+    "category": "data",
+    "tags": ["scroll"],
+    "summary": "A list or a table of links drawn as a network graph: partners, integrations, teams, knowledge maps.",
+    "looks": "Every item becomes a round node in its group color, bigger the more links it has (or the bigger its value), with thin links in the text color between them and the names beside the nodes. The layout is worked out once from a seed, so the picture is the same on every visit. When a third of the graph is in view the nodes come in from the first item outward. The pointer or keyboard focus on a node rings it, keeps its neighbors and their links and dims the rest, and a tooltip names it and what it links to.",
+    "target": "a `<ul>` or `<ol>` whose items are the nodes (nested lists link an item to the one it sits in, `data-dio-to` links any two), or a `<table>` whose rows link the names in their first two cells, sized with CSS",
+    "on": "ul, ol, table",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "mode",
+        "attribute": "data-dio-mode",
+        "type": "choice",
+        "default": "force",
+        "values": ["force", "radial", "tree", "circle"],
+        "live": false,
+        "preload": false,
+        "description": "Layout: force spreads linked nodes as a network, for ecosystems and knowledge maps; radial puts the first item in the middle and the rest in rings around it, for partners around a product; tree hangs the list top down by its nesting, for team structure and sitemaps; circle sets the nodes on a ring grouped by color with links bowed through the middle, for who works with whom."
+      },
+      {
+        "name": "motion",
+        "attribute": "data-dio-motion",
+        "type": "choice",
+        "default": "grow",
+        "values": ["grow", "spread", "fade"],
+        "live": false,
+        "preload": false,
+        "description": "Entrance: grow pops the nodes up and draws each link from its start; spread flies the nodes out of the first item; fade fades everything in place."
+      },
+      {
+        "name": "colors",
+        "attribute": "data-dio-colors",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Group colors in the order groups first appear, separated by spaces; empty uses a colorblind-safe set."
+      },
+      {
+        "name": "seed",
+        "attribute": "data-dio-seed",
+        "type": "number",
+        "default": 1,
+        "live": false,
+        "preload": false,
+        "description": "Seed of the force layout: another number gives another arrangement of the same graph.",
+        "range": [1, 1000],
+        "step": 1
+      },
+      {
+        "name": "radius",
+        "attribute": "data-dio-radius",
+        "type": "number",
+        "default": 6,
+        "live": true,
+        "preload": true,
+        "description": "Radius of an average node; nodes with more links or a bigger value grow to 1.6 times it.",
+        "range": [2, 24],
+        "step": 0.5,
+        "unit": "px"
+      },
+      {
+        "name": "thickness",
+        "attribute": "data-dio-thickness",
+        "type": "number",
+        "default": 1.25,
+        "live": true,
+        "preload": true,
+        "description": "Width of a link.",
+        "range": [0.5, 6],
+        "step": 0.25,
+        "unit": "px"
+      },
+      {
+        "name": "labels",
+        "attribute": "data-dio-labels",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Draws the names beside the nodes, leaving out the ones that would overlap."
+      },
+      {
+        "name": "arrows",
+        "attribute": "data-dio-arrows",
+        "type": "boolean",
+        "default": false,
+        "live": true,
+        "preload": true,
+        "description": "Draws an arrowhead where a link ends, for a graph with direction."
+      },
+      {
+        "name": "dim",
+        "attribute": "data-dio-dim",
+        "type": "number",
+        "default": 0.75,
+        "live": true,
+        "preload": true,
+        "description": "How much a lit node dims the nodes it does not link to; 0 keeps them as they are.",
+        "range": [0, 1],
+        "step": 0.05
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 0.6,
+        "live": true,
+        "preload": true,
+        "description": "Time one node takes to come in; 0 shows the graph at once.",
+        "range": [0, 3],
+        "step": 0.05,
+        "unit": "s"
+      },
+      {
+        "name": "stagger",
+        "attribute": "data-dio-stagger",
+        "type": "number",
+        "default": 0.12,
+        "live": true,
+        "preload": true,
+        "description": "Delay between one step away from the first item and the next; 0 brings every node in at once.",
+        "range": [0, 0.5],
+        "step": 0.01,
+        "unit": "s"
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "reducedMotion", "width", "y"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while the nodes come in and for a few frames as a lit node fades in or out; none at rest."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "The graph stands complete from the first frame; hover, focus and the tooltip still work."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page."
+    },
+    "touch": "A tap on a node lights it and shows its tooltip, a second tap follows its link, a tap elsewhere clears it.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "Four draw calls: all links, all arrowheads, all nodes as one instanced call, and the labels texture.",
+      "memory": "One canvas texture the size of the box at up to 2x pixel ratio, plus about 100 bytes per node and link. The layout runs once on the CPU: about 30 ms for 200 nodes.",
+      "chunk": 8199
+    },
+    "examples": [
+      {
+        "title": "Integrations around a product, grouped by kind",
+        "html": "<ul class=\"graph\" data-dio=\"graph\" data-dio-mode=\"radial\"><li>Acme Cloud<ul data-dio-group=\"Payments\"><li><a href=\"/integrations/stripe\">Stripe</a></li><li><a href=\"/integrations/paypal\">PayPal</a></li></ul><ul data-dio-group=\"Chat\"><li><a href=\"/integrations/slack\">Slack</a></li><li><a href=\"/integrations/teams\">Teams</a></li></ul></li></ul>"
+      },
+      {
+        "title": "A team structure from the nested list it already is",
+        "html": "<ul class=\"org\" data-dio=\"graph\" data-dio-mode=\"tree\" data-dio-motion=\"fade\"><li>CEO<ul><li>CTO<ul><li>Platform</li><li>Product</li></ul></li><li>COO<ul><li>Sales</li><li>Support</li></ul></li></ul></li></ul>"
+      },
+      {
+        "title": "A knowledge map: topics linked by id",
+        "html": "<ul class=\"map\" data-dio=\"graph\"><li id=\"light\">Light</li><li id=\"optics\" data-dio-to=\"light lens\">Optics</li><li id=\"lens\">Lenses</li><li data-dio-to=\"lens light\">Cameras</li></ul>"
+      },
+      {
+        "title": "A table of links with weights, as arrows",
+        "html": "<table class=\"flows\" data-dio=\"graph\" data-dio-arrows=\"\"><thead><tr><th>From</th><th>To</th><th>Orders</th></tr></thead><tbody><tr><td>Warehouse</td><td>Berlin</td><td>420</td></tr><tr><td>Warehouse</td><td>Paris</td><td>310</td></tr><tr><td>Berlin</td><td>Prague</td><td>90</td></tr></tbody></table>"
+      }
+    ],
+    "children": [
+      {
+        "attribute": "data-dio-to",
+        "description": "On a list item: ids or names of the items it links to, separated by spaces."
+      },
+      {
+        "attribute": "data-dio-group",
+        "description": "On a list item, a list or a table cell: the group that colors the node and the items inside."
+      },
+      {
+        "attribute": "data-dio-value",
+        "description": "On a list item: a number that sizes the node instead of its count of links."
+      }
+    ],
+    "parts": [
+      {
+        "name": "tooltip",
+        "description": "The tooltip with the node name, the rest of its item text and the names it links to."
+      }
+    ]
+  },
+  {
+    "name": "heatmap",
+    "module": "data",
+    "package": "@dioramajs/data",
+    "import": "@dioramajs/data/heatmap",
+    "builtIn": true,
+    "source": "packages/data/src/heatmap.ts",
+    "category": "data",
+    "tags": ["scroll"],
+    "summary": "A table drawn as a heatmap: a matrix of rows and columns, or a calendar of days like a contributions chart.",
+    "looks": "Each value becomes a rounded tile, or a dot sized by the value, colored on an even scale: one hue from light to dark for amounts, blue and red around a gray when values fall on both sides of zero. Empty cells and zeros stay faint. Row and column labels (weekdays and months in a calendar) and a small legend are drawn in the text color. When a third of it is in view the cells sweep in from the top left corner. The pointer over a cell rings it, dims the rest except its row and column, and shows its value as written.",
+    "target": "a `<table>`: for the grid, a header row naming the columns and the first cell of each row naming the row; for the calendar, rows of a date and a value (or a `<dl>` of dates and values), sized with CSS",
+    "on": "table, dl, ul, ol",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "mode",
+        "attribute": "data-dio-mode",
+        "type": "choice",
+        "default": "grid",
+        "values": ["grid", "calendar"],
+        "live": false,
+        "preload": false,
+        "description": "grid draws the table as a matrix, for occupancy by weekday and hour, usage by feature and plan or availability; calendar lays dated values out a column per week and a row per weekday, for activity over a year."
+      },
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "tile",
+        "values": ["tile", "dot"],
+        "live": false,
+        "preload": false,
+        "description": "tile fills each cell with its color, for reading patterns; dot draws a circle whose area follows the value, for sparse data where the size of a few big values matters."
+      },
+      {
+        "name": "motion",
+        "attribute": "data-dio-motion",
+        "type": "choice",
+        "default": "sweep",
+        "values": ["sweep", "fade"],
+        "live": false,
+        "preload": false,
+        "description": "Entrance: sweep grows the cells in from the top left corner; fade fades them all in at once."
+      },
+      {
+        "name": "colors",
+        "attribute": "data-dio-colors",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Colors of the scale from the lowest value to the highest, separated by spaces; empty uses a colorblind-safe blue, or blue and red around 0."
+      },
+      {
+        "name": "steps",
+        "attribute": "data-dio-steps",
+        "type": "number",
+        "default": 5,
+        "live": true,
+        "preload": true,
+        "description": "Number of color bins the scale snaps to, as the legend shows them; 0 colors each value exactly.",
+        "range": [0, 9],
+        "step": 1
+      },
+      {
+        "name": "max",
+        "attribute": "data-dio-max",
+        "type": "number",
+        "default": "auto",
+        "live": false,
+        "preload": false,
+        "description": "Value at the top of the scale, for heatmaps compared side by side; auto takes the largest value.",
+        "range": [1, 1000000],
+        "step": 1
+      },
+      {
+        "name": "gap",
+        "attribute": "data-dio-gap",
+        "type": "number",
+        "default": 2,
+        "live": true,
+        "preload": true,
+        "description": "Gap between cells; 0 lets them touch.",
+        "range": [0, 12],
+        "step": 0.5,
+        "unit": "px"
+      },
+      {
+        "name": "radius",
+        "attribute": "data-dio-radius",
+        "type": "number",
+        "default": 2,
+        "live": true,
+        "preload": true,
+        "description": "Corner radius of a tile.",
+        "range": [0, 12],
+        "step": 0.5,
+        "unit": "px"
+      },
+      {
+        "name": "labels",
+        "attribute": "data-dio-labels",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Draws the row and column labels, or weekdays and months."
+      },
+      {
+        "name": "legend",
+        "attribute": "data-dio-legend",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Draws the color scale with its lowest and highest values under the cells."
+      },
+      {
+        "name": "dim",
+        "attribute": "data-dio-dim",
+        "type": "number",
+        "default": 0.35,
+        "live": true,
+        "preload": true,
+        "description": "How much the hovered cell dims the others, less in its own row and column; 0 keeps them.",
+        "range": [0, 1],
+        "step": 0.05
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Time one cell takes to come in; 0 shows the heatmap at once.",
+        "range": [0, 3],
+        "step": 0.05,
+        "unit": "s"
+      },
+      {
+        "name": "stagger",
+        "attribute": "data-dio-stagger",
+        "type": "number",
+        "default": 0.02,
+        "live": true,
+        "preload": true,
+        "description": "Delay from one diagonal of cells to the next in the sweep; 0 brings them in together.",
+        "range": [0, 0.1],
+        "step": 0.005,
+        "unit": "s"
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "reducedMotion", "width", "y"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while the cells come in and for a few frames as a hovered cell fades in or out; none at rest."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "The heatmap stands complete from the first frame; hover and the tooltip still work."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page."
+    },
+    "touch": "A tap on a cell shows its value, a tap elsewhere hides it. Nothing else changes.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "Two draw calls: all cells as one instanced call and the labels texture.",
+      "memory": "One canvas texture the size of the box at up to 2x pixel ratio, plus about 60 bytes per cell.",
+      "chunk": 7006
+    },
+    "examples": [
+      {
+        "title": "Bookings by weekday and hour",
+        "html": "<table class=\"busy\" data-dio=\"heatmap\"><caption>Bookings per hour</caption><thead><tr><th></th><th>9</th><th>12</th><th>15</th><th>18</th></tr></thead><tbody><tr><th>Mon</th><td>4</td><td>12</td><td>7</td><td>3</td></tr><tr><th>Tue</th><td>5</td><td>14</td><td>9</td><td>2</td></tr><tr><th>Sat</th><td>18</td><td>26</td><td>21</td><td>9</td></tr></tbody></table>"
+      },
+      {
+        "title": "A year of activity as a calendar",
+        "html": "<table class=\"activity\" data-dio=\"heatmap\" data-dio-mode=\"calendar\"><caption>Commits in 2026</caption><tbody><tr><td><time datetime=\"2026-01-05\">Jan 5</time></td><td>3</td></tr><tr><td><time datetime=\"2026-01-06\">Jan 6</time></td><td>7</td></tr><tr><td><time datetime=\"2026-01-08\">Jan 8</time></td><td>1</td></tr></tbody></table>"
+      },
+      {
+        "title": "Change against last year, as dots with exact colors",
+        "html": "<table class=\"change\" data-dio=\"heatmap\" data-dio-style=\"dot\" data-dio-steps=\"0\"><thead><tr><th>Region</th><th>Q1</th><th>Q2</th></tr></thead><tbody><tr><th>North</th><td>+12%</td><td>-4%</td></tr><tr><th>South</th><td>-9%</td><td>+3%</td></tr></tbody></table>"
+      }
+    ],
+    "children": [
+      {
+        "attribute": "data-dio-value",
+        "description": "Exact value of a cell whose text is not a plain number, such as \"busy\"."
+      },
+      {
+        "attribute": "data-dio-date",
+        "description": "The date of a calendar row whose cell text is not a date and holds no `<time>`."
+      }
+    ],
+    "parts": [
+      {
+        "name": "tooltip",
+        "description": "The tooltip with the row and column, or the date, and the value as written."
+      }
+    ]
+  },
+  {
+    "name": "map",
+    "module": "data",
+    "package": "@dioramajs/data",
+    "import": "@dioramajs/data/map",
+    "builtIn": true,
+    "source": "packages/data/src/map.ts",
+    "category": "data",
+    "summary": "A flat map of the world or a region with markers for a list of places and arcs between them.",
+    "looks": "The continents as a grid of dots or a solid fill on an Equal Earth projection, fitted to the box with no frame or ocean unless asked. Each place is a round marker; the one under the pointer or in focus grows and gets a ring. Arcs between places bow towards the north and draw themselves in once the map scrolls into view.",
+    "target": "an element with a list of places inside, or an empty element with `markers` pointing at a list elsewhere, sized with CSS",
+    "on": ":not(img, video, canvas)",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "markers",
+        "attribute": "data-dio-markers",
+        "type": "string",
+        "default": "[data-dio-lat]",
+        "live": false,
+        "preload": false,
+        "description": "Selector of the places: inside the element, or in the document when none are inside."
+      },
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "dots",
+        "values": ["dots", "solid"],
+        "live": false,
+        "preload": false,
+        "description": "Land as a grid of dots, or as a solid fill of the land mask."
+      },
+      {
+        "name": "region",
+        "attribute": "data-dio-region",
+        "type": "choice",
+        "default": "world",
+        "values": ["world", "europe", "americas", "asia", "africa", "oceania"],
+        "live": false,
+        "preload": false,
+        "description": "Part of the world to frame: world without Antarctica; europe; americas; asia; africa; oceania. The box shows more map around it."
+      },
+      {
+        "name": "dots",
+        "attribute": "data-dio-dots",
+        "type": "number",
+        "default": 160,
+        "live": false,
+        "preload": false,
+        "caps": {
+          "low": 100,
+          "medium": 130
+        },
+        "description": "Dots across the width of the box, in the dots style.",
+        "range": [40, 400],
+        "step": 10
+      },
+      {
+        "name": "center",
+        "attribute": "data-dio-center",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Moves the middle of the map east (positive) or west, in degrees of longitude.",
+        "range": [-180, 180],
+        "unit": "deg"
+      },
+      {
+        "name": "zoom",
+        "attribute": "data-dio-zoom",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Magnifies the region about its middle; 1 fits the whole region.",
+        "range": [1, 8],
+        "step": 0.1
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#8792a8",
+        "live": true,
+        "preload": true,
+        "description": "Color of the sea, drawn only when `sea` is above 0."
+      },
+      {
+        "name": "sea",
+        "attribute": "data-dio-sea",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Opacity of the sea dots or fill; 0 leaves the page background.",
+        "range": [0, 1]
+      },
+      {
+        "name": "land",
+        "attribute": "data-dio-land",
+        "type": "color",
+        "default": "#8792a8",
+        "live": true,
+        "preload": true,
+        "description": "Color of the land."
+      },
+      {
+        "name": "marker",
+        "attribute": "data-dio-marker",
+        "type": "color",
+        "default": "#ff5a36",
+        "live": true,
+        "preload": true,
+        "description": "Color of the markers."
+      },
+      {
+        "name": "arc",
+        "attribute": "data-dio-arc",
+        "type": "color",
+        "default": "#ff5a36",
+        "live": true,
+        "preload": true,
+        "description": "Color of the arcs."
+      },
+      {
+        "name": "markerSize",
+        "attribute": "data-dio-marker-size",
+        "type": "number",
+        "default": 8,
+        "live": true,
+        "preload": true,
+        "description": "Diameter of a marker.",
+        "range": [2, 24],
+        "unit": "px"
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "presence", "reducedMotion", "width", "y"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while the arcs draw in and for a few frames as a marker lights up or goes dark; none at rest."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "Arcs stand drawn from the first frame and markers light up without easing."
+    },
+    "presence": {
+      "mode": "fade",
+      "note": "Fades with the page while settling from 98% of its size."
+    },
+    "touch": "Nothing hovers: a tap on a marker works as a click on its link.",
+    "quality": {
+      "min": "low",
+      "notes": {
+        "low": "100 dots across.",
+        "medium": "130 dots across."
+      }
+    },
+    "cost": {
+      "gpu": "Three draw calls: all dots (or the land mesh), all markers and all arcs.",
+      "memory": "About 12 bytes per dot (under 150 KB at 160 across), or a 260 KB land mask texture for `solid`.",
+      "chunk": 5101
+    },
+    "examples": [
+      {
+        "title": "Offices with routes from the head office",
+        "html": "<div class=\"map\" data-dio=\"map\"><ul><li id=\"ams\" data-dio-lat=\"52.37\" data-dio-lng=\"4.90\" data-dio-to=\"nyc sin\"><a href=\"/offices/amsterdam\">Amsterdam</a></li><li id=\"nyc\" data-dio-lat=\"40.71\" data-dio-lng=\"-74.01\"><a href=\"/offices/new-york\">New York</a></li><li id=\"sin\" data-dio-lat=\"1.35\" data-dio-lng=\"103.82\"><a href=\"/offices/singapore\">Singapore</a></li></ul></div>"
+      },
+      {
+        "title": "Stores in Europe as a solid map with a visible list",
+        "html": "<div class=\"map\" data-dio=\"map\" data-dio-region=\"europe\" data-dio-style=\"solid\" data-dio-markers=\"#stores li\" aria-hidden=\"true\"></div><ul id=\"stores\"><li data-dio-lat=\"48.86\" data-dio-lng=\"2.35\"><a href=\"/stores/paris\">Paris</a></li><li data-dio-lat=\"41.39\" data-dio-lng=\"2.17\"><a href=\"/stores/barcelona\">Barcelona</a></li></ul>"
+      },
+      {
+        "title": "A tooltip from the marker event",
+        "html": "<div class=\"map\" data-dio=\"map\" data-dio-markers=\"#events li\"></div><p class=\"tip\"></p>",
+        "ts": "document.querySelector('.map').addEventListener('dio:marker', (e) => {\n  document.querySelector('.tip').textContent = e.detail.marker?.textContent ?? ''\n})"
+      }
+    ],
+    "events": [
+      {
+        "name": "dio:marker",
+        "description": "A marker lights up under the pointer, from a hovered legend item or a focused link, or goes dark (marker and id null). Bubbles.",
+        "detail": "{ marker: Element | null; id: string | null }"
+      }
+    ],
+    "children": [
+      {
+        "attribute": "data-dio-lat",
+        "description": "Latitude of the place in degrees, -90 to 90."
+      },
+      {
+        "attribute": "data-dio-lng",
+        "description": "Longitude of the place in degrees, -180 to 180."
+      },
+      {
+        "attribute": "data-dio-to",
+        "description": "Ids of other places to draw arcs to, separated by spaces."
+      }
+    ],
+    "credits": "Land data: Natural Earth (public domain)"
+  }
+]

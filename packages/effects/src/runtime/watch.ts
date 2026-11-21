@@ -1,3 +1,4 @@
+// Wakes the frame loop for DOM movement the kernel sees no event for.
 import type { LayerImpl } from './layer'
 
 /** Quiet time after which the watcher sleeps, ms. */
@@ -13,7 +14,9 @@ export class Watcher {
   readonly #invalidate: () => void
   /** x, y, width, height and opacity per layer at the last tick. */
   readonly #seen = new WeakMap<LayerImpl, number[]>()
+  /** The pending rAF id, 0 when asleep. */
   #frame = 0
+  /** When the watched layers last moved, or the watcher last woke. */
   #quiet = 0
 
   constructor(layers: () => Iterable<LayerImpl>, invalidate: () => void, signal: AbortSignal) {
@@ -38,31 +41,19 @@ export class Watcher {
   readonly #tick = (now: number): void => {
     this.#frame = 0
     let targets = 0
+    // A 'frame' layer keeps the watcher awake while it is visible.
     let awake = false
     let moved = false
     for (const layer of this.#layers()) {
-      const frame = layer.mode === 'frame'
-      if (!layer.visible || !(frame || layer.inputs.styles.moving)) continue
+      const everyFrame = layer.mode === 'frame'
+      if (!layer.visible || !(everyFrame || layer.inputs.styles.moving)) continue
       targets++
-      awake ||= frame
+      awake ||= everyFrame
       const { x, y, width, height } = layer.element.getBoundingClientRect()
       const opacity = layer.inputs.styles.opacity()
       const last = this.#seen.get(layer) ?? []
       this.#seen.set(layer, last)
-      if (
-        last[0] !== x ||
-        last[1] !== y ||
-        last[2] !== width ||
-        last[3] !== height ||
-        last[4] !== opacity
-      ) {
-        last[0] = x
-        last[1] = y
-        last[2] = width
-        last[3] = height
-        last[4] = opacity
-        moved = true
-      }
+      if (update(last, [x, y, width, height, opacity])) moved = true
     }
     if (moved) {
       this.#quiet = now
@@ -71,4 +62,15 @@ export class Watcher {
     if (!targets || (!awake && now - this.#quiet > IDLE)) return
     this.#frame = requestAnimationFrame(this.#tick)
   }
+}
+
+/** Copies `values` into `last`. True if any differed. */
+function update(last: number[], values: readonly number[]): boolean {
+  let changed = false
+  for (let index = 0; index < values.length; index++) {
+    if (last[index] === values[index]) continue
+    last[index] = values[index] as number
+    changed = true
+  }
+  return changed
 }

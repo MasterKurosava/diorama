@@ -1,4 +1,4 @@
-import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import type { GLTF } from 'three/addons/loaders/GLTFLoader.js'
 import type {
   BufferGeometry,
   CompressedTexture,
@@ -48,9 +48,9 @@ function resources(root: Object3D): Resources {
   root.traverse((object) => {
     const { geometry, material } = object as Mesh
     if (geometry) found.geometries.add(geometry)
-    for (const m of [material ?? []].flat() as Material[]) {
-      found.materials.add(m)
-      for (const value of Object.values(m)) {
+    for (const each of [material ?? []].flat() as Material[]) {
+      found.materials.add(each)
+      for (const value of Object.values(each)) {
         if ((value as Texture | null)?.isTexture) found.textures.add(value)
       }
     }
@@ -111,8 +111,8 @@ export const gltf: AssetLoader<Model> = {
   async load(context) {
     const { url } = context
     const [{ GLTFLoader }, { clone }, buffer] = await Promise.all([
-      import('three/examples/jsm/loaders/GLTFLoader.js'),
-      import('three/examples/jsm/utils/SkeletonUtils.js'),
+      import('three/addons/loaders/GLTFLoader.js'),
+      import('three/addons/utils/SkeletonUtils.js'),
       context.fetch().then((response) => context.bytes(response)),
     ])
     let used: Set<string>

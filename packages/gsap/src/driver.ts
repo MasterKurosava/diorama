@@ -1,4 +1,4 @@
-import { type FrameDriver, tickerDriver } from '@diorama/core'
+import { type FrameDriver, tickerDriver } from '@dioramajs/core'
 import type { GsapLike, GsapTickerCallback } from './types'
 
 const drivers = new WeakMap<GsapLike, FrameDriver>()

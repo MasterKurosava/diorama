@@ -2,6 +2,7 @@ import { DioramaError } from './errors'
 import type { ErrorSource, Logger, Off } from './types'
 import { isThenable, noop, resolved } from './util'
 
+/** Reports an error to the app: logs it, emits `app:error`, calls `onError`. */
 export type Report = (
   error: unknown,
   source: ErrorSource,
@@ -9,6 +10,7 @@ export type Report = (
   target?: string,
 ) => void
 
+/** What every owner of one app shares. */
 export interface OwnerEnv {
   readonly report: Report
   logFor(owner: Owner): Logger
@@ -33,12 +35,14 @@ export class Owner {
   disposed = false
   /** Set when a running setup is cut short, so its later registrations throw ABORTED. */
   abortOnAdd = false
+  /** `undefined` inherits readiness from the parent. */
   #ownReady: boolean | undefined
   #parent: Owner | undefined
+  /** Drops this owner from its parent's cleanups once it disposes on its own. */
   #unlink: (() => void) | undefined
   readonly #cleanups = new Set<() => unknown>()
   #controller: AbortController | undefined
-  #done: Promise<void> | undefined
+  #disposal: Promise<void> | undefined
   #logger: Logger | undefined
 
   constructor(options: OwnerOptions) {
@@ -58,6 +62,7 @@ export class Owner {
     this.#ownReady = value
   }
 
+  /** Aborts when the owner disposes. Created on first read. */
   get signal(): AbortSignal {
     if (!this.#controller) {
       this.#controller = new AbortController()
@@ -87,16 +92,17 @@ export class Owner {
   add(undo: () => unknown): Off {
     if (this.disposed) {
       // Undo first. The orphaned setup gets ABORTED, but its resource must not leak.
-      this.#run(undo)
+      this.#runUndo(undo)
       this.open()
       return noop
     }
     this.#cleanups.add(undo)
     return () => {
-      if (this.#cleanups.delete(undo)) this.#run(undo)
+      if (this.#cleanups.delete(undo)) this.#runUndo(undo)
     }
   }
 
+  /** A nested owner, disposed with this one. Options not given are inherited. */
   child(options?: Partial<OwnerOptions>): Owner {
     const child = new Owner({
       env: this.env,
@@ -117,10 +123,10 @@ export class Owner {
 
   /** Aborts, then runs undos synchronously. The promise covers async undos only. */
   dispose(): Promise<void> {
-    if (this.#done) return this.#done
-    // Claim `#done` and empty the list before running anything, since undos may re-enter.
+    if (this.#disposal) return this.#disposal
+    // Claim `#disposal` and empty the list before running anything, since undos may re-enter.
     let finish: (value: Promise<void>) => void = noop
-    this.#done = new Promise<void>((resolve) => {
+    this.#disposal = new Promise<void>((resolve) => {
       finish = resolve
     })
     this.disposed = true
@@ -128,19 +134,22 @@ export class Owner {
     const undos = [...this.#cleanups].reverse()
     this.#cleanups.clear()
     this.#controller?.abort()
-    const async = undos.map((undo) => this.#run(undo)).filter(isThenable)
-    finish(async.length ? Promise.all(async).then(noop) : resolved)
-    return this.#done
+    const pending = undos.map((undo) => this.#runUndo(undo)).filter(isThenable)
+    finish(pending.length ? Promise.all(pending).then(noop) : resolved)
+    return this.#disposal
   }
 
-  #run(undo: () => unknown): unknown {
+  /** Runs one undo and reports its failure. Returns a promise only for an async undo. */
+  #runUndo(undo: () => unknown): unknown {
     try {
       const result = undo()
       return isThenable(result)
-        ? Promise.resolve(result).then(undefined, (e) => this.env.report(e, 'dispose', this))
+        ? Promise.resolve(result).then(undefined, (error) =>
+            this.env.report(error, 'dispose', this),
+          )
         : undefined
-    } catch (e) {
-      this.env.report(e, 'dispose', this)
+    } catch (error) {
+      this.env.report(error, 'dispose', this)
     }
   }
 }

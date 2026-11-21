@@ -1,4 +1,6 @@
-import type { Group, Mesh, Object3D } from 'three/webgpu'
+// Taken copies and ghosts: an element's GL copy under an owner (`app.effects.take`, the
+// `effects:release` hook), which may outlive the element as a ghost until the owner releases it.
+import type { Mesh, Object3D } from 'three/webgpu'
 import { DEV } from '../define'
 import { EffectError } from '../errors'
 import type { InstanceStatus, TakeOptions } from '../types'
@@ -6,12 +8,11 @@ import { type CopyHost, CopyImpl } from './copy'
 import type { LayerImpl } from './layer'
 import type { World } from './world'
 
-/** renderOrder offset of each `above` level. */
-const ABOVE = 1e6
 /** Statuses after which an element's copy will not become drawable. */
-const DEAD: ReadonlySet<InstanceStatus> = new Set(['failed', 'off', 'unavailable'])
+const NEVER_DRAWS: ReadonlySet<InstanceStatus> = new Set(['failed', 'off', 'unavailable'])
+/** Texture uploads of veiled copies per frame: each copies pixels on the main thread. */
+const UPLOADS_PER_FRAME = 1
 
-/** Taken copies and ghosts, i.e. layers under an owner that may outlive their element. */
 export class Copies {
   /** Taken copies of elements in the document, or with no layer yet. */
   readonly taken: Map<Element, CopyImpl> = new Map()
@@ -101,6 +102,7 @@ export class Copies {
     layer.detach()
     layer.rest = layer.drawn ?? { x: input.x, y: input.y, width: input.width, height: input.height }
     layer.anchor.dispose()
+    layer.section = world.sections.swap(layer.section, undefined)
     layer.media?.freeze()
     copy.haunt()
   }
@@ -121,7 +123,6 @@ export class Copies {
     if (!copy) return
     layer.taken = undefined
     copy.layer = undefined
-    this.#lower(copy)
     // With `leave: 'release'` the copy goes with its records, otherwise it waits for a layer.
     if (copy.leave === 'release' && !layer.element.isConnected) copy.release()
     else copy.decide(false)
@@ -141,27 +142,10 @@ export class Copies {
       return
     }
     const records = this.#world.host.instancesOf(copy.element)
-    const dead = records.length
-      ? records.every((r) => DEAD.has(r.status))
+    const never = records.length
+      ? records.every((record) => NEVER_DRAWS.has(record.status))
       : scanned && copy.element.isConnected
-    if (dead) copy.decide(false)
-  }
-
-  /** Applies `above` as an offset on every group of the layer, keeping the author's order inside. */
-  lift(layer: LayerImpl, copy: CopyImpl): void {
-    const by = ABOVE * copy.above
-    if (by !== copy.lift) this.#lower(copy)
-    copy.lift = by
-    if (!by) return
-    const lift = (object: Object3D): void => {
-      if (!(object as Group).isGroup || copy.lifted.has(object)) return
-      copy.lifted.set(object, object.renderOrder)
-      object.renderOrder += by
-    }
-    layer.root.traverse(lift)
-    for (const inst of layer.insts) {
-      for (const phase of [inst.current, inst.next]) phase?.viewport?.traverse(lift)
-    }
+    if (never) copy.decide(false)
   }
 
   /** Called in present. Veiled copies warm up, then pending ones decide, ghosts included. */
@@ -177,7 +161,7 @@ export class Copies {
   }
 
   /** The only way a ghost ends: its instances close, then its layer. */
-  #bury(layer: LayerImpl): void {
+  #buryGhost(layer: LayerImpl): void {
     const world = this.#world
     world.later(() => {
       for (const inst of [...layer.insts]) world.close(inst)
@@ -190,9 +174,9 @@ export class Copies {
     const { element, layer } = copy
     // The owner may still hold the released copy, so drop its scene references.
     copy.layer = undefined
-    this.#lower(copy)
+    layer?.lower()
     if (copy.ghost) {
-      if (layer) this.#bury(layer)
+      if (layer) this.#buryGhost(layer)
       return
     }
     if (this.taken.get(element) === copy) this.taken.delete(element)
@@ -213,45 +197,43 @@ export class Copies {
     return true
   }
 
-  #lower(copy: CopyImpl): void {
-    for (const [object, order] of copy.lifted) object.renderOrder = order
-    copy.lifted.clear()
-    copy.lift = 0
-  }
-
   /** Gets veiled copies ready before they show: texture uploaded, placed objects compiled. */
   #warm(): void {
-    const world = this.#world
-    let uploads = 1
+    let uploads = UPLOADS_PER_FRAME
     for (const copy of this.taken.values()) {
       const layer = copy.layer
       if (!copy.veil || !layer) continue
       const texture = layer.media?.state === 'ready' ? layer.media.texture : undefined
       if (texture && copy.uploaded !== texture.image) {
-        // One upload per frame, each copies pixels on the main thread.
         if (uploads-- > 0) {
-          world.render.renderer.initTexture(texture)
+          this.#world.render.renderer.initTexture(texture)
           copy.uploaded = texture.image
-        } else world.invalidate()
+        } else this.#world.invalidate()
       }
-      for (const inst of layer.insts) {
-        const phase = inst.current
-        if (phase?.state !== 'active') continue
-        for (const { object } of phase.placed) {
-          if (copy.compiled.has(object)) continue
-          copy.compiled.set(object, false)
-          // Compile the object itself, since projection would skip its hidden parents. The queue
-          // may hold it past the phase, so objects of a closed phase are skipped.
-          const job: Promise<void> = world
-            .compileWith(layer, object as Mesh, () => phase.state === 'active')
-            // A later copy may queue the object again, and only the last job counts.
-            .then(() => {
-              if (this.compiling.get(object) === job) this.compiling.delete(object)
-              copy.compiled.set(object, true)
-              world.invalidate()
-            })
-          this.compiling.set(object, job)
-        }
+      this.#compilePlaced(copy, layer)
+    }
+  }
+
+  /** Queues a compile of each placed object of the layer's active phases, once per copy. */
+  #compilePlaced(copy: CopyImpl, layer: LayerImpl): void {
+    const world = this.#world
+    for (const inst of layer.insts) {
+      const phase = inst.current
+      if (phase?.state !== 'active') continue
+      for (const { object } of phase.placed) {
+        if (copy.compiled.has(object)) continue
+        copy.compiled.set(object, false)
+        // Compile the object itself, since projection would skip its hidden parents. The queue
+        // may hold it past the phase, so objects of a closed phase are skipped.
+        const job: Promise<void> = world
+          .compileWith(layer, object as Mesh, () => phase.state === 'active')
+          // A later copy may queue the object again, and only the last job counts.
+          .then(() => {
+            if (this.compiling.get(object) === job) this.compiling.delete(object)
+            copy.compiled.set(object, true)
+            world.invalidate()
+          })
+        this.compiling.set(object, job)
       }
     }
   }

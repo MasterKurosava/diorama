@@ -1,4 +1,4 @@
-// diorama-glsl CLI: converts shaders next to their sources, checks them in CI, watches them.
+// dioramajs-glsl CLI: converts shaders next to their sources, checks them in CI, watches them.
 import {
   existsSync,
   type FSWatcher,
@@ -10,7 +10,7 @@ import {
 } from 'node:fs'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
-import type { ParamDefault } from '@diorama/effects'
+import type { ParamDefault } from '@dioramajs/effects'
 import { format, GlslError } from './convert/errors'
 import { type Converted, type ConvertOptions, convertParts } from './convert/index'
 import type { Binding } from './types'
@@ -26,9 +26,14 @@ export interface CliRun {
   close(): void
 }
 
-const USAGE = `diorama-glsl <files...> [--out-dir dir] [--stage auto|uv|color|position]
+const USAGE = `dioramajs-glsl <files...> [--out-dir dir] [--stage auto|uv|color|position]
              [--bind uMouse=input:pointerNdc] [--default uStrength=1] [--check] [--json] [--watch]`
+/** ms a burst of change events is merged into one conversion. */
+const DEBOUNCE = 30
+/** ms between checks for a watched file that is missing, until it reappears. */
+const MISSING_RETRY = 250
 
+/** `--default` values: a bool, a number, a tuple of numbers, or a colour. */
 function parseDefault(text: string): ParamDefault {
   const parts = text.split(/[\s,]+/).filter(Boolean)
   const numbers = parts.map(Number)
@@ -54,11 +59,15 @@ const parse = (argv: readonly string[]) =>
     },
   })
 
-const pairs = <T>(list: readonly string[] | undefined, map: (v: string) => T): Record<string, T> =>
+/** `key=value` arguments as an object, each value mapped. */
+const pairs = <T>(
+  list: readonly string[] | undefined,
+  map: (value: string) => T,
+): Record<string, T> =>
   Object.fromEntries(
     (list ?? []).map((item) => {
-      const i = item.indexOf('=')
-      return [item.slice(0, i), map(item.slice(i + 1))]
+      const equals = item.indexOf('=')
+      return [item.slice(0, equals), map(item.slice(equals + 1))]
     }),
   )
 
@@ -66,8 +75,8 @@ const pairs = <T>(list: readonly string[] | undefined, map: (v: string) => T): R
 export function run(
   argv: readonly string[],
   io: CliIO = {
-    out: (t) => process.stdout.write(`${t}\n`),
-    err: (t) => process.stderr.write(`${t}\n`),
+    out: (text) => process.stdout.write(`${text}\n`),
+    err: (text) => process.stderr.write(`${text}\n`),
   },
 ): CliRun {
   let parsed: ReturnType<typeof parse>
@@ -83,32 +92,31 @@ export function run(
     return { code: values.help ? 0 : 2, close() {} }
   }
   const files: string[] = []
-  for (const p of positionals) {
-    const found = /[*?[]/.test(p) ? globSync(p) : [p]
+  for (const pattern of positionals) {
+    const found = /[*?[]/.test(pattern) ? globSync(pattern) : [pattern]
     if (!found.length) {
-      io.err(`${p}: no files match`)
+      io.err(`${pattern}: no files match`)
       return { code: 2, close() {} }
     }
-    for (const f of found) if (!files.includes(resolve(f))) files.push(resolve(f))
+    for (const file of found) if (!files.includes(resolve(file))) files.push(resolve(file))
   }
   const options: ConvertOptions = {
     stage: values.stage as ConvertOptions['stage'],
-    bindings: pairs(values.bind, (v) => v as Binding),
+    bindings: pairs(values.bind, (value) => value as Binding),
     defaults: pairs(values.default, parseDefault),
   }
   // Mirror the input folders under --out-dir so files with the same name don't collide.
   const outDir = values['out-dir'] && resolve(values['out-dir'])
-  const root = files.map(dirname).reduce((a, b) => {
-    while (a !== b && !`${b}${sep}`.startsWith(`${a}${sep}`)) a = dirname(a)
-    return a
-  })
+  const root = commonFolder(files)
   const folder = (file: string): string =>
     outDir ? join(outDir, relative(root, dirname(file))) : dirname(file)
   const target = (file: string, ext: string): string =>
     join(folder(file), `${basename(file)}${ext}`)
+  /** Includes of each converted file, to convert it again when one changes. */
   const deps = new Map<string, Set<string>>()
 
-  const one = (file: string): boolean => {
+  /** Converts one file and writes, or with `--check` compares, its output. */
+  const convertFile = (file: string): boolean => {
     let result: Converted
     try {
       result = convertParts(readFileSync(file, 'utf8'), {
@@ -121,7 +129,7 @@ export function run(
         io.err(`${file}: ${(error as Error).message}`)
         return false
       }
-      for (const d of error.diagnostics) io.err(format(d, true))
+      for (const diagnostic of error.diagnostics) io.err(format(diagnostic, true))
       return false
     }
     deps.set(file, new Set(result.includes))
@@ -129,16 +137,18 @@ export function run(
       const { code: _code, parts: _parts, ...rest } = result
       io.out(JSON.stringify({ file, ...rest }))
     } else {
-      const table = Object.entries(result.shader.uniforms).map(([u, b]) => `  ${u} → ${b.bind}`)
+      const table = Object.entries(result.shader.uniforms).map(
+        ([uniform, info]) => `  ${uniform} → ${info.bind}`,
+      )
       io.out(
         `${basename(file)} (${result.shader.stage}, ${result.stats.fixes} fixes)${table.length ? `\n${table.join('\n')}` : ''}`,
       )
-      for (const d of result.diagnostics) io.out(format(d, true))
+      for (const diagnostic of result.diagnostics) io.out(format(diagnostic, true))
     }
     const js = target(file, '.js')
     if (values.check) {
       if (existsSync(js) && readFileSync(js, 'utf8') !== result.code) {
-        io.err(`${js} is stale: run diorama-glsl without --check`)
+        io.err(`${js} is stale: run dioramajs-glsl without --check`)
         return false
       }
       return true
@@ -150,14 +160,36 @@ export function run(
   }
 
   let ok = true
-  for (const file of files) ok = one(file) && ok
+  for (const file of files) ok = convertFile(file) && ok
   const code = ok ? 0 : 1
   if (!values.watch) return { code, close() {} }
+  const close = watchFiles(files, deps, convertFile)
+  io.out(`watching ${files.length} file(s)`)
+  return { code, close }
+}
 
-  // Editors that save by rename kill the watcher, so a path is watched again once it reappears.
+/** The deepest folder that holds every file. */
+function commonFolder(files: readonly string[]): string {
+  return files.map(dirname).reduce((common, folder) => {
+    while (common !== folder && !`${folder}${sep}`.startsWith(`${common}${sep}`))
+      common = dirname(common)
+    return common
+  })
+}
+
+/**
+ * Converts a file again when it or one of its includes changes. Editors that save by rename kill
+ * the watcher, so a path is watched again once it reappears. Returns the stop function.
+ */
+function watchFiles(
+  files: readonly string[],
+  deps: ReadonlyMap<string, ReadonlySet<string>>,
+  convertFile: (file: string) => boolean,
+): () => void {
   const watchers = new Map<string, FSWatcher>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
   let closed = false
+  /** Runs `fn` after `ms`, replacing a pending call with the same key. */
   const later = (key: string, ms: number, fn: () => void): void => {
     clearTimeout(timers.get(key))
     timers.set(
@@ -173,16 +205,17 @@ export function run(
     watchers.delete(path)
   }
   const changed = (path: string): void =>
-    later(path, 30, () => {
-      for (const file of files) if (file === path || deps.get(file)?.has(path)) one(file)
+    later(path, DEBOUNCE, () => {
+      for (const file of files) if (file === path || deps.get(file)?.has(path)) convertFile(file)
       sync()
     })
+  /** Watches every file and include not watched yet. */
   const sync = (): void => {
-    const wanted = new Set([...files, ...[...deps.values()].flatMap((s) => [...s])])
+    const wanted = new Set([...files, ...[...deps.values()].flatMap((includes) => [...includes])])
     for (const path of wanted) {
       if (watchers.has(path)) continue
       if (!existsSync(path)) {
-        later(`missing:${path}`, 250, () => (existsSync(path) ? changed(path) : sync()))
+        later(`missing:${path}`, MISSING_RETRY, () => (existsSync(path) ? changed(path) : sync()))
         continue
       }
       const watcher = watch(path, (event) => {
@@ -198,14 +231,10 @@ export function run(
     }
   }
   sync()
-  io.out(`watching ${files.length} file(s)`)
-  return {
-    code,
-    close() {
-      closed = true
-      for (const timer of timers.values()) clearTimeout(timer)
-      timers.clear()
-      for (const path of [...watchers.keys()]) unwatch(path)
-    },
+  return () => {
+    closed = true
+    for (const timer of timers.values()) clearTimeout(timer)
+    timers.clear()
+    for (const path of [...watchers.keys()]) unwatch(path)
   }
 }

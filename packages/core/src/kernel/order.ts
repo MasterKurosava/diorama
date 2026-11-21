@@ -1,26 +1,34 @@
+/** An entry ordered by `before`/`after` labels: a hook handler or a system. */
 export interface Orderable {
+  /** Names that `before` and `after` of other entries can refer to. */
   readonly labels: readonly string[]
   readonly before: readonly string[]
   readonly after: readonly string[]
   /** Owning plugin's ordinal. App code uses Infinity and runs after plugins. */
   readonly rank: number
+  /** Registration order, the last tie-breaker. */
   readonly seq: number
 }
 
-export const orderRefs = (ref: string | readonly string[] | undefined): readonly string[] =>
-  ref === undefined ? [] : typeof ref === 'string' ? [ref] : ref
+export const orderRefs = (ref: string | readonly string[] | undefined): readonly string[] => {
+  if (ref === undefined) return []
+  return typeof ref === 'string' ? [ref] : ref
+}
 
 /**
- * Kahn's algorithm that always takes the `less`-smallest ready node, so the result is
- * deterministic. Returns the order, or the nodes left inside cycles.
+ * Topological sort (Kahn's algorithm) over nodes `0..count-1`, where `edges[a]` lists the nodes
+ * that must come after `a`. Among the nodes ready at each step it takes the `less`-smallest, so
+ * the result is deterministic. Returns the order, or the nodes left inside cycles.
  */
-export function kahn(
+export function topologicalSort(
   count: number,
   edges: readonly (readonly number[])[],
   less: (a: number, b: number) => boolean,
 ): number[] | { stuck: number[] } {
   const indegree = new Array<number>(count).fill(0)
-  for (const targets of edges) for (const t of targets) indegree[t] = (indegree[t] ?? 0) + 1
+  for (const targets of edges) {
+    for (const target of targets) indegree[target] = (indegree[target] ?? 0) + 1
+  }
   const done = new Array<boolean>(count).fill(false)
   const order: number[] = []
   for (;;) {
@@ -31,9 +39,10 @@ export function kahn(
     if (next < 0) break
     done[next] = true
     order.push(next)
-    for (const t of edges[next] ?? []) indegree[t] = (indegree[t] ?? 0) - 1
+    for (const target of edges[next] ?? []) indegree[target] = (indegree[target] ?? 0) - 1
   }
-  return order.length === count ? order : { stuck: [...done.keys()].filter((i) => !done[i]) }
+  if (order.length === count) return order
+  return { stuck: [...done.keys()].filter((i) => !done[i]) }
 }
 
 /** One concrete cycle among `stuck` nodes, for error messages. */
@@ -45,6 +54,7 @@ export function findCycle(
   const visiting = new Set<number>()
   const visited = new Set<number>()
   const path: number[] = []
+  // Depth-first search. Reaching a node still on the path closes a cycle.
   const visit = (node: number): number[] | undefined => {
     visiting.add(node)
     path.push(node)
@@ -72,16 +82,16 @@ export function sortOrderables<T extends Orderable>(items: readonly T[]): T[] | 
   items.forEach((a, i) => {
     items.forEach((b, j) => {
       if (i === j) return
-      if (a.before.some((l) => b.labels.includes(l))) edges[i]?.push(j)
-      if (a.after.some((l) => b.labels.includes(l))) edges[j]?.push(i)
+      if (a.before.some((label) => b.labels.includes(label))) edges[i]?.push(j)
+      if (a.after.some((label) => b.labels.includes(label))) edges[j]?.push(i)
     })
   })
   const less = (a: number, b: number): boolean => {
-    const x = items[a] as T
-    const y = items[b] as T
-    return x.rank !== y.rank ? x.rank < y.rank : x.seq < y.seq
+    const first = items[a] as T
+    const second = items[b] as T
+    return first.rank !== second.rank ? first.rank < second.rank : first.seq < second.seq
   }
-  const result = kahn(items.length, edges, less)
+  const result = topologicalSort(items.length, edges, less)
   if (Array.isArray(result)) return result.map((i) => items[i] as T)
   return { cycle: findCycle(edges, result.stuck).map((i) => items[i] as T) }
 }

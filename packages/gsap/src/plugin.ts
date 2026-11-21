@@ -1,11 +1,13 @@
 import {
   definePlugin,
   type FrameDriver,
+  type LogCode,
   type Off,
   type Plugin,
   type ScrollApi,
   type ScrollSource,
-} from '@diorama/core'
+} from '@dioramajs/core'
+import { DEV, withDocs } from '@dioramajs/core/dev'
 import { gsapDriver } from './driver'
 import type {
   GsapApi,
@@ -17,12 +19,7 @@ import type {
   ScrollTriggerStatic,
 } from './types'
 
-declare const process: { env: Record<string, string | undefined> } | undefined
-const DEV: boolean =
-  (import.meta as { env?: { DEV?: boolean } }).env?.DEV ??
-  (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production')
-
-/** The part of `app.effects` the plugin uses, so @diorama/effects stays an optional peer. */
+/** The part of `app.effects` the plugin uses, so @dioramajs/effects stays an optional peer. */
 interface EffectsLike {
   instances(): readonly { readonly element: Element }[]
   pin(element: Element, source: () => number): Off
@@ -63,8 +60,8 @@ function findScrollTrigger(gsap: GsapLike): ScrollTriggerStatic | undefined {
 }
 
 const deterministic = (driver: FrameDriver): boolean => {
-  const d = driver as { step?: unknown; tick?: unknown }
-  return typeof d.step === 'function' || typeof d.tick === 'function'
+  const candidate = driver as { step?: unknown; tick?: unknown }
+  return typeof candidate.step === 'function' || typeof candidate.tick === 'function'
 }
 
 const windowSource: ScrollSource = {
@@ -227,7 +224,10 @@ export const gsapPlugin: Plugin<'gsap', GsapPluginOptions, GsapApi, 'gsap'> =
               Object.keys(globalsOf(gsap) ?? {}).length > 0
             ) {
               app.log.warn(
-                'GSAP_SCROLLTRIGGER: ScrollTrigger is not found in gsap.core.globals(): pass `scrollTrigger: ScrollTrigger` to gsapPlugin',
+                withDocs(
+                  'GSAP_SCROLLTRIGGER: ScrollTrigger is not found in gsap.core.globals(): pass `scrollTrigger: ScrollTrigger` to gsapPlugin',
+                  'GSAP_SCROLLTRIGGER' satisfies LogCode,
+                ),
               )
             }
           }
@@ -247,7 +247,7 @@ export const gsapPlugin: Plugin<'gsap', GsapPluginOptions, GsapApi, 'gsap'> =
           return scrollTrigger
         },
         pin(st, pinOptions = {}) {
-          if (!fx) throw new Error('gsap.pin needs @diorama/effects')
+          if (!fx) throw new Error('gsap.pin needs @dioramajs/effects')
           // A destroyed app binds nothing, since no pin would ever be undone.
           if (app.abortSignal.aborted) return noop
           const els = targets(pinOptions.target, st.pin ?? st.trigger, fx)
@@ -263,7 +263,7 @@ export const gsapPlugin: Plugin<'gsap', GsapPluginOptions, GsapApi, 'gsap'> =
             if (done) return
             done = true
             unregister()
-            for (const o of offs) o()
+            for (const off of offs) off()
             for (const el of els) {
               const count = (explicit.get(el) ?? 1) - 1
               if (count > 0) explicit.set(el, count)

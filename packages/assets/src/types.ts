@@ -1,9 +1,11 @@
-import type { Off, ReadonlySignal } from '@diorama/core'
-import type { RenderApi } from '@diorama/render'
+import type { Off, ReadonlySignal } from '@dioramajs/core'
+import type { RenderApi } from '@dioramajs/render'
 import type { AnimationClip, CompressedTexture, Group, Object3D, Texture } from 'three/webgpu'
 import type { AssetError } from './errors'
 
+/** Request priority. An entry runs at the highest priority among its leases. */
 export type Priority = 'high' | 'normal' | 'low'
+/** State of a lease. */
 export type AssetStatus = 'loading' | 'ready' | 'failed' | 'released'
 /** `''` (default) sends no CORS mode, like an <img> without `crossorigin`. */
 export type CrossOrigin = '' | 'anonymous' | 'use-credentials'
@@ -14,16 +16,21 @@ export interface AssetTypes {
   image: ImageBitmap
   /** Origin bottom-left like effects textures, built from the `image` entry. Shared, never dispose it. */
   texture: Texture
+  /** A glTF model owned by the cache. */
   gltf: Model
   /** Origin top-left like glTF, and `flipY` can't be changed. Shared, never dispose it. */
   ktx2: CompressedTexture
+  /** Raw bytes. */
   buffer: ArrayBuffer
+  /** Parsed JSON. */
   json: unknown
 }
 
 /** A glTF owned by the cache. Place instances and never dispose their resources. */
 export interface Model {
+  /** The loaded scene. Place instances, not this group. */
   readonly scene: Group
+  /** Animation clips of the file. */
   readonly animations: readonly AnimationClip[]
   /**
    * A clone sharing geometry, materials and textures (SkeletonUtils for skinned). The shared
@@ -32,12 +39,17 @@ export interface Model {
   instance(): Object3D
 }
 
+/** Options of `assets.load`. */
 export interface LoadOptions<K extends string = string> {
   /** Guessed from the extension when omitted: gltf for .glb and .gltf, ktx2 for .ktx2, texture for images. */
   readonly type?: K
   /** Default 'normal'. An entry runs at the highest priority among its leases. */
   readonly priority?: Priority
-  /** Part of the key, as the browser keys its image cache by CORS mode. */
+  /**
+   * Part of the key, as the browser keys its image cache by CORS mode. A `texture` of another
+   * origin is always asked in CORS mode: `''` becomes `'anonymous'`, since the GPU refuses
+   * pixels fetched without it.
+   */
   readonly crossOrigin?: CrossOrigin
   /** Loader options, part of the key. For example `{ colorSpace: 'linear' }`. */
   readonly options?: Readonly<Record<string, string | number | boolean>>
@@ -51,20 +63,27 @@ export interface LoadOptions<K extends string = string> {
  */
 export interface Asset<T, E = AssetError> {
   (): void
+  /** Releases the lease. The entry goes when its last lease does. */
   release(): void
   /** Same as release, so `ctx.onDispose(asset)` ties it to an effect. */
   dispose(): void
+  /** Cache key: type, URL, CORS mode and options. */
   readonly key: string
+  /** Absolute URL. */
   readonly url: string
+  /** State of the lease. */
   readonly status: ReadonlySignal<AssetStatus>
   /** Rejects with `E`, or with an unreported ASSET_ABORTED if released before ready. */
   readonly ready: Promise<T>
   /** The value while the lease is ready, undefined before and after. */
   readonly value: T | undefined
+  /** The failure while the lease is failed. */
   readonly error: E | undefined
 }
 
+/** What a loader resolves with. */
 export interface Loaded<T> {
+  /** The loaded value. */
   readonly value: T
   /** Approximate size in bytes for `retain` and progress weights. Estimated when absent. */
   readonly bytes?: number
@@ -74,13 +93,19 @@ export interface Loaded<T> {
   readonly renderBound?: boolean
 }
 
+/** What a loader gets for one entry. */
 export interface LoaderContext {
+  /** Absolute URL to load. */
   readonly url: string
+  /** Cache key of the entry. */
   readonly key: string
   /** The highest priority among the entry's leases. */
   readonly priority: Priority
+  /** CORS mode of the request. */
   readonly crossOrigin: CrossOrigin
+  /** Loader options from `load()`. */
   readonly options: Readonly<Record<string, string | number | boolean>>
+  /** Aborts when the last lease goes before the load ends. */
   readonly signal: AbortSignal
   /** fetch() with the priority hint and signal. HTTP errors throw ASSET_LOAD. */
   fetch(init?: RequestInit): Promise<Response>
@@ -103,9 +128,11 @@ export interface LoaderContext {
   readonly decoders: Readonly<Partial<DecoderOptions>>
 }
 
+/** Loads one type of asset. */
 export interface AssetLoader<T = unknown> {
   /** Extensions this loader handles when no type is given, e.g. ['.glb', '.gltf']. */
   readonly extensions?: readonly string[]
+  /** Loads the value of one entry. */
   load(context: LoaderContext): Promise<Loaded<T>>
 }
 /** A loader, or a lazy module exporting one. Three-based loaders come through import(). */
@@ -113,6 +140,7 @@ export type LoaderEntry =
   | AssetLoader
   | (() => Promise<AssetLoader | { readonly default: AssetLoader }>)
 
+/** Where Draco, KTX2 and Meshopt decoders come from. */
 export interface DecoderOptions {
   /** A directory or `{ js, wasm }`, false refuses. Defaults to three's glTF-only build next to DRACOLoader. */
   readonly draco: string | { readonly js: string; readonly wasm: string } | false
@@ -124,8 +152,10 @@ export interface DecoderOptions {
   readonly workers: number | undefined
 }
 
+/** What `preload` takes: URLs, a parsed Document or a container element. */
 export type PreloadSource = string | readonly string[] | ParentNode
 
+/** Options of `assets.preload`. */
 export interface PreloadOptions {
   /** Default 'low'. */
   readonly priority?: Priority
@@ -146,18 +176,23 @@ export interface Preload extends PromiseLike<void> {
   dispose(): void
 }
 
+/** Counters of the cache. */
 export interface AssetsStats {
+  /** Entries in the cache. */
   readonly entries: number
   /** Entries with leases. */
   readonly used: number
   /** Bytes of entries without leases, kept by `retain`. */
   readonly retained: number
+  /** Entries still loading. */
   readonly pending: number
 }
 
+/** Options of the `assets` plugin. */
 export interface AssetsOptions {
   /** Own loaders by type, next to the built-in ones. A lazy one is picked by `type` only. */
   readonly loaders: Readonly<Record<string, LoaderEntry>>
+  /** Where the Draco, KTX2 and Meshopt decoders come from. */
   readonly decoders: Partial<DecoderOptions>
   /** Parallel requests. Default 6. At most 2 of them low, and only while no high request waits. */
   readonly concurrency: number
@@ -167,7 +202,13 @@ export interface AssetsOptions {
   readonly preload: boolean
 }
 
+/** The `assets` service: a shared cache of media and models with progress. */
 export interface AssetsApi {
+  /**
+   * Loads a URL and returns a lease at once. The type comes from `type` or the extension.
+   * Never throws: `ready` rejects with an AssetError, `ASSET_TYPE` for an unknown type,
+   * `ASSET_LOAD` for a network or HTTP failure, `ASSET_PARSE` or `ASSET_DECODER` for bad data.
+   */
   load<K extends keyof AssetTypes>(
     url: string,
     options: LoadOptions<K> & { readonly type: K },
@@ -184,7 +225,10 @@ export interface AssetsApi {
   ): Asset<T, unknown>
   /** Next page's media and models: URLs, a parsed Document (Astro, Swup) or a container (Barba). */
   preload(source: PreloadSource, options?: PreloadOptions): Preload
-  /** Counts outside work in the current wave, like first-screen effects, fonts or page HTML. */
+  /**
+   * Counts outside work in the current wave, like first-screen effects, fonts or page HTML.
+   * `weight: 0` holds `ready()` without moving progress or starting a wave of its own.
+   */
   track(
     work: PromiseLike<unknown>,
     options?: { readonly weight?: number; readonly priority?: Priority },
@@ -198,9 +242,11 @@ export interface AssetsApi {
   readonly progress: ReadonlySignal<number>
   /** Settles when the current wave is done, or at once without one. Failures count as done. */
   ready(): Promise<void>
+  /** Counters of the cache. */
   stats(): AssetsStats
 }
 
+/** Codes of `AssetError`. */
 export type AssetErrorCode =
   | 'ASSET_LOAD'
   | 'ASSET_PARSE'
@@ -208,8 +254,9 @@ export type AssetErrorCode =
   | 'ASSET_DECODER'
   | 'ASSET_ABORTED'
 
-declare module '@diorama/core' {
+declare module '@dioramajs/core' {
   interface Services {
+    /** Asset cache and preloading, see `AssetsApi`. */
     assets: AssetsApi
   }
   interface Hooks {

@@ -1,31 +1,47 @@
-import { type AnchorsApi, type PluginApp, type Signal, type StageApi, signal } from '@diorama/core'
-import type { Box, Copy, EffectsApi, ReleaseRequest } from '@diorama/effects'
+// One page transition from start to end. Before the swap it takes the drawn copies of keyed
+// elements. After the swap it pairs each with its new element and flies it there, fades unpaired
+// copies out and new effect elements in, then lands every flight and lets the copies go.
+import {
+  type AnchorsApi,
+  type PluginApp,
+  type Signal,
+  type StageApi,
+  signal,
+} from '@dioramajs/core'
+import type { Box, Copy, EffectsApi, ReleaseRequest } from '@dioramajs/effects'
+import {
+  effectElements,
+  inDocumentOrder,
+  isViewTransition,
+  keySelector,
+  NAMEABLE,
+  NATIVE,
+  nativeActive,
+  viewTransitionName,
+  within,
+} from './dom'
 import type { TransitionError } from './errors'
+import { FlightImpl, flightCrop, here, type Owner, PresenceImpl, show } from './flight'
 import {
   boxOf,
   clamp,
-  FlightImpl,
-  flightCrop,
   frameOf,
-  here,
   hold,
   inView,
   lerp,
   lerpBox,
+  moved,
   noop,
-  type Owner,
   type Pose,
-  PresenceImpl,
   place,
   poseOf,
   push,
   radiusOf,
   rate,
-  show,
   sized,
   smooth,
   travel,
-} from './flight'
+} from './geometry'
 import type { Page } from './page'
 import type { Pool } from './pool'
 import type {
@@ -44,7 +60,7 @@ export type View = PluginApp<{
   readonly stage: StageApi
   readonly anchors: AnchorsApi
   readonly effects?: EffectsApi
-  /** `@diorama/assets`, typed structurally. Low-priority work waits while a flight runs. */
+  /** `@dioramajs/assets`, typed structurally. Low-priority work waits while a flight runs. */
   readonly assets?: { pause(reason?: string): () => void }
 }>
 /** `leave` and `enter` stay unset unless the site sets them (0.25 s in a view transition). */
@@ -65,6 +81,7 @@ export interface Source {
   readonly share?: number
 }
 
+/** What a transition needs from the plugin that runs it. */
 export interface Host {
   readonly app: View
   readonly options: Settings
@@ -73,6 +90,7 @@ export interface Host {
   readonly current: Signal<TransitionImpl | undefined>
   readonly pool: Pool
   readonly page: Page
+  /** Number of the latest transition. Remnants remember the one that made them. */
   gen: number
   /** Ends the current transition and returns its visible copies. */
   supersede(): Source[]
@@ -98,78 +116,44 @@ export interface Host {
   report(code: TransitionError['code'], message: string, cause: unknown): void
 }
 
-// Seconds a copy fades in place when its target is lost, and under reduced motion.
+/** Seconds a copy fades in place when its target is lost. */
 const LEAVE = 0.15
+/** Seconds a copy fades in place under reduced motion. */
 const REDUCED = 0.2
-/** Seconds of the browser's default root crossfade in a view transition. */
-export const NATIVE = 0.25
-// Entering copies: how long their DOM waits for one (ms), the earliest share of the flight they
-// may start at, and the stagger between them.
+/** Milliseconds an entering element's DOM waits for its copy before it shows instead. */
 const ENTER_WAIT = 500
+/** Earliest share of the flight duration entering copies may start at. */
 const ENTER_AT = 0.2
+/** Seconds between one entering copy and the next. */
 const ENTER_STEP = 0.04
 // Progress range where the target's copy takes over under the flying one. Early, so the rest of
 // the flight already shows the target as it lands.
 const MIX_FROM = 0.15
 const MIX_TO = 0.5
-// Minimum takeover length for a target that turns drawable late, even past the landing.
+/** Minimum takeover length for a target that turns drawable late, even past the landing. */
 const MIX_MIN = 0.3
 // Draw levels over the page. A flying copy goes over one that has faded in place, and the copy
 // shown under either sits one level lower.
 const GONE = 2
 const TOP = 4
-// A copy fading in place coasts on, slowing as (1 - k)^COAST until it stops at the end.
+/** A copy fading in place coasts on, slowing as (1 - t)^COAST until it stops at the end. */
 const COAST = 2
-// Minimum share of `duration` for a flight that supersedes a moving one.
+/** Minimum share of `duration` for a flight that supersedes a moving one. */
 const SHORTEST = 0.3
-// Decay of a carried velocity. It adds v * duration * p * (1 - p)^DAMP to the box.
+/** Decay of a carried velocity. It adds v * duration * p * (1 - p)^DAMP to the box. */
 const DAMP = 5
-// A takeover this close to done at the landing just ends there, with no crossfade.
+/** A takeover this close to done at the landing just ends there, with no crossfade. */
 const TAKEN = 1e-3
+/** Default seconds the swap, and `animate`, may take before the transition ends anyway. */
 const TIMEOUT = 10
-// Frames with no writes after which an `animate` that never settles is ended.
+/** Frames with no writes after which an `animate` that never settles is ended. */
 const QUIET_FRAMES = 2
-// Elements a view-transition-name may key. Matched in document order like any selector list.
-const NAMEABLE = '[data-dio-key],[data-dio],img,video'
-const NOT_NAMES = new Set(['', 'none', 'auto', 'match-element'])
 
 const isThenable = (value: unknown): value is PromiseLike<unknown> =>
   typeof (value as PromiseLike<unknown> | null)?.then === 'function'
-export const sel = (key: string): string => `[data-dio-key="${CSS.escape(key)}"]`
-/** The node itself if it matches, plus matching descendants. */
-export const within = (node: Element, selector: string): Element[] => [
-  ...(node.matches(selector) ? [node] : []),
-  ...node.querySelectorAll(selector),
-]
-const nameOf = (el: Element): string | undefined => {
-  const name = getComputedStyle(el).getPropertyValue('view-transition-name').trim()
-  return NOT_NAMES.has(name) ? undefined : name
-}
-/** Inside a browser view transition. Browsers that don't know the selector throw on it. */
-export const nativeActive = (): boolean => {
-  try {
-    return document.documentElement.matches(':active-view-transition')
-  } catch {
-    return false
-  }
-}
-// Marked up or attached from code.
-const effectElements = (fx: EffectsApi): Element[] => [
-  ...document.querySelectorAll('[data-dio]'),
-  ...fx.instances().map((i) => i.element),
-]
-const isViewTransition = (vt: unknown): vt is ViewTransition =>
-  typeof ViewTransition === 'function' && vt instanceof ViewTransition
-// 2 is DOCUMENT_POSITION_PRECEDING, i.e. `b` comes first.
-const inDocumentOrder = (a: Element, b: Element): number =>
-  a.compareDocumentPosition(b) & 2 ? 1 : -1
-const moved = (a: Box, b: Box): boolean =>
-  Math.max(
-    Math.abs(a.x - b.x),
-    Math.abs(a.y - b.y),
-    Math.abs(a.width - b.width),
-    Math.abs(a.height - b.height),
-  ) > 1
+
+/** Keyed and named sources may share a key, so the two kinds are told apart. */
+const sourceId = (key: string, named: boolean): string => `${+named}${key}`
 
 /** One transition: snapshot, swap, pairing, flights, landing and cleanup. */
 export class TransitionImpl implements Transition, Owner {
@@ -202,28 +186,32 @@ export class TransitionImpl implements Transition, Owner {
   #known: Set<Element> | undefined
   /** Targets the observer veiled as they arrived during an async swap, by key. */
   readonly #early = new Map<string, Copy>()
+  /** The swap has been called. */
   #called = false
   #settled = false
   #rotated = false
   #ended = false
+  /** Frame 0 has run. */
   #started = false
   /** Set by finish() or abort() before the swap settled. Ends once the page has changed. */
   #stopped: 'done' | 'aborted' | undefined
+  /** Seconds since frame 0. */
   #clock = 0
   #landings = 0
   /** Frames in a row with no writes while `animate` runs. */
   #quiet = 0
+  /** The site wrote to a flight or presence since the last frame. */
   #touched = false
   #animating = false
   #swapTimer: ReturnType<typeof setTimeout> | undefined
   #animateTimer: ReturnType<typeof setTimeout> | undefined
   /** Timers after which entering copies give way to their DOM. */
   readonly #waits = new Set<ReturnType<typeof setTimeout>>()
-  #offAbort: () => void = noop
-  #pause: () => void = noop
-  #ok: () => void = noop
-  #fail: (error: unknown) => void = noop
-  #done: (result: TransitionResult) => void = noop
+  #removeAbortListener: () => void = noop
+  #resumeAssets: () => void = noop
+  #resolveSwapped: () => void = noop
+  #rejectSwapped: (error: unknown) => void = noop
+  #resolveFinished: (result: TransitionResult) => void = noop
 
   constructor(host: Host, options: TransitionOptions, auto: boolean) {
     const settings = host.options
@@ -241,21 +229,22 @@ export class TransitionImpl implements Transition, Owner {
     // undefined or a look-alike falls back to the selector. Astro passes a look-alike when it only
     // simulates a transition (no API, or the browser's own back-swipe animation).
     const given = options.viewTransition
-    const vt = given === null || isViewTransition(given) ? given : undefined
-    this.#native = !auto && (vt === undefined ? nativeActive() : !!vt)
-    const native = this.#native ? NATIVE : 0
+    const viewTransition = given === null || isViewTransition(given) ? given : undefined
+    this.#native = !auto && (viewTransition === undefined ? nativeActive() : !!viewTransition)
+    const rootFade = this.#native ? NATIVE : 0
     const leave = options.leave ?? settings.leave
     // Reduced motion skips the site's choreography and keeps only the root crossfade, on opacity.
-    this.#leave = this.#reduced ? native : (leave ?? native)
-    this.#enter = this.#reduced ? native : (options.enter ?? settings.enter ?? native)
-    this.#late = !auto && !native && vt === undefined && (this.#reduced || leave === undefined)
-    this.swapped = new Promise<void>((ok, fail) => {
-      this.#ok = ok
-      this.#fail = fail
+    this.#leave = this.#reduced ? rootFade : (leave ?? rootFade)
+    this.#enter = this.#reduced ? rootFade : (options.enter ?? settings.enter ?? rootFade)
+    this.#late =
+      !auto && !rootFade && viewTransition === undefined && (this.#reduced || leave === undefined)
+    this.swapped = new Promise<void>((resolve, reject) => {
+      this.#resolveSwapped = resolve
+      this.#rejectSwapped = reject
     })
     this.swapped.catch(noop)
-    this.finished = new Promise((done) => {
-      this.#done = done
+    this.finished = new Promise((resolve) => {
+      this.#resolveFinished = resolve
     })
   }
 
@@ -286,13 +275,13 @@ export class TransitionImpl implements Transition, Owner {
 
   run(swap: Swap): this {
     const host = this.#host
-    const fx = host.app.effects
+    const effects = host.app.effects
     const carried = host.supersede()
     host.pool.clear()
     const { signal } = this.#options
     // Already aborted: the swap still runs, nothing flies.
-    if (fx?.status.peek() === 'ready' && !signal?.aborted) this.#collect(fx, carried)
-    else for (const s of carried) this.#drop(s)
+    if (effects?.status.peek() === 'ready' && !signal?.aborted) this.#collect(effects, carried)
+    else for (const source of carried) this.#drop(source)
     host.open(this)
     this.#called = true
     let result: unknown
@@ -300,7 +289,7 @@ export class TransitionImpl implements Transition, Owner {
       result = swap()
     } catch (error) {
       this.#end('failed', error)
-      this.#fail(error)
+      this.#rejectSwapped(error)
       throw error
     }
     if (isThenable(result)) {
@@ -312,24 +301,24 @@ export class TransitionImpl implements Transition, Owner {
       result.then(
         () => {
           this.#settle()
-          this.#ok()
+          this.#resolveSwapped()
         },
         (error: unknown) => {
           if (!host.signal.aborted) host.report('TRANSITION_SWAP', 'the swap rejected', error)
           if (!this.#settled) this.#end('failed', error)
-          this.#fail(error)
+          this.#rejectSwapped(error)
         },
       )
     } else {
       this.#settle()
-      this.#ok()
+      this.#resolveSwapped()
     }
     if (signal && !this.#ended) {
       const abort = (): void => this.abort()
       if (signal.aborted) abort()
       else {
         signal.addEventListener('abort', abort, { once: true })
-        this.#offAbort = () => signal.removeEventListener('abort', abort)
+        this.#removeAbortListener = () => signal.removeEventListener('abort', abort)
       }
     }
     return this
@@ -338,68 +327,68 @@ export class TransitionImpl implements Transition, Owner {
   /** Implicit transition with no swap. Pairs ghosts already taken (auto mode, a late partner). */
   fly(items: readonly Source[]): this {
     const keys = new Set<string>()
-    for (const s of [...this.#host.supersede(), ...items]) {
-      if (keys.has(s.key)) this.#drop(s)
+    for (const source of [...this.#host.supersede(), ...items]) {
+      if (keys.has(source.key)) this.#drop(source)
       else {
-        keys.add(s.key)
-        this.#sources.push(s)
+        keys.add(source.key)
+        this.#sources.push(source)
       }
     }
     this.#host.open(this)
     this.#settle()
-    this.#ok()
+    this.#resolveSwapped()
     return this
   }
 
-  /** Takes drawn keyed copies in view before the swap, one per key. */
-  #collect(fx: EffectsApi, carried: readonly Source[]): void {
+  /** Takes drawn keyed copies in view before the swap, one per key. Carried sources come first. */
+  #collect(effects: EffectsApi, carried: readonly Source[]): void {
     const host = this.#host
     const width = host.app.stage.width.peek()
     const height = host.app.stage.height.peek()
     const held = host.options.sources !== 'follow'
     const ids = new Set<string>()
     const skip = new Set<Element>()
-    const id = (key: string, named: boolean): string => `${+named}${key}`
-    for (const s of carried) {
-      skip.add(s.element)
-      if (ids.has(id(s.key, s.named))) this.#drop(s)
+    for (const source of carried) {
+      skip.add(source.element)
+      const id = sourceId(source.key, source.named)
+      if (ids.has(id)) this.#drop(source)
       else {
-        ids.add(id(s.key, s.named))
-        this.#sources.push(s)
+        ids.add(id)
+        this.#sources.push(source)
       }
     }
     for (const element of document.querySelectorAll('[data-dio-state="drawn"]')) {
       if (skip.has(element)) continue
-      const attr = element.getAttribute('data-dio-key')
-      const key = attr ?? nameOf(element)
-      if (key === undefined || ids.has(id(key, attr === null))) continue
-      const copy = host.adopt(element) ?? fx.take(element, { signal: host.signal })
+      const keyAttribute = element.getAttribute('data-dio-key')
+      const named = keyAttribute === null
+      const key = keyAttribute ?? viewTransitionName(element)
+      if (key === undefined || ids.has(sourceId(key, named))) continue
+      const copy = host.adopt(element) ?? effects.take(element, { signal: host.signal })
       const drawn = copy.drawn
       if (copy.state === 'released' || !drawn || !inView(drawn, width, height)) {
         copy.release()
         continue
       }
-      ids.add(id(key, attr === null))
+      ids.add(sourceId(key, named))
       if (held) hold(copy, drawn)
-      this.#sources.push({ key, named: attr === null, element, copy, pose: drawn })
+      this.#sources.push({ key, named, element, copy, pose: drawn })
     }
-    const named = this.#sources.some((s) => s.named)
-    const keyed = named ? NAMEABLE : '[data-dio-key]'
-    this.#snapshot = new Set(document.querySelectorAll(keyed))
-    if (this.#enter > 0) this.#known = new Set(effectElements(fx))
+    const named = this.#sources.some((source) => source.named)
+    this.#snapshot = new Set(document.querySelectorAll(named ? NAMEABLE : '[data-dio-key]'))
+    if (this.#enter > 0) this.#known = new Set(effectElements(effects))
   }
 
-  #drop(s: Source): void {
-    s.flight?.anchor?.dispose()
-    s.copy.release()
-    if (s.trail) this.#host.remnant(s.trail, this.gen)
+  #drop(source: Source): void {
+    source.flight?.anchor?.dispose()
+    source.copy.release()
+    if (source.trail) this.#host.remnant(source.trail, this.gen)
   }
 
   /** Veiled copy of a target. Reuses one the plugin still holds if there is one. */
-  #targetOf(fx: EffectsApi, el: Element): Copy {
+  #targetOf(effects: EffectsApi, element: Element): Copy {
     return (
-      this.#host.reclaim(el) ??
-      fx.take(el, { veil: true, leave: 'release', signal: this.#host.signal })
+      this.#host.reclaim(element) ??
+      effects.take(element, { veil: true, leave: 'release', signal: this.#host.signal })
     )
   }
 
@@ -409,17 +398,17 @@ export class TransitionImpl implements Transition, Owner {
     this.#settled = true
     clearTimeout(this.#swapTimer)
     const host = this.#host
-    const fx = host.app.effects
+    const effects = host.app.effects
     // Stopped or aborted during the swap: nothing pairs or enters.
     const stopped = this.#stopped ?? (this.#options.signal?.aborted ? 'aborted' : undefined)
     this.#rotate()
     if (!this.auto) host.attr('swapping')
-    if (fx) {
+    if (effects) {
       if (stopped) this.#release()
-      else this.#pair(fx)
+      else this.#pair(effects)
       // Scan now so removed sources become ghosts in this same reconcile.
-      if (!this.auto) fx.scan()
-      if (!stopped) this.#enterNew(fx)
+      if (!this.auto) effects.scan()
+      if (!stopped) this.#enterNew(effects)
     }
     if (!this.auto) host.app.emit('page:enter', { url: host.page.url })
     if (stopped) this.#stop(stopped)
@@ -428,6 +417,7 @@ export class TransitionImpl implements Transition, Owner {
     else host.app.invalidate()
   }
 
+  /** Closes the old page scope and opens the new one, once. */
   #rotate(): void {
     if (this.#rotated || this.auto) return
     this.#rotated = true
@@ -437,149 +427,160 @@ export class TransitionImpl implements Transition, Owner {
 
   // Pairs
 
-  #pair(fx: EffectsApi): void {
+  #pair(effects: EffectsApi): void {
     const sources = this.#sources
     this.#sources = []
     const pairs: [Source, Element][] = []
     const used = new Set<Element>()
     let names: Map<string, Element> | undefined
-    for (const s of sources) {
+    for (const source of sources) {
       let to: Element | undefined
-      if (s.named) {
-        names ??= this.#names()
-        to = names.get(s.key)
+      if (source.named) {
+        names ??= this.#newNames()
+        to = names.get(source.key)
       } else {
-        const all = [...document.querySelectorAll(sel(s.key))].filter((el) => !used.has(el))
-        const fresh = all.filter((el) => !this.#snapshot.has(el))
+        const all = [...document.querySelectorAll(keySelector(source.key))].filter(
+          (element) => !used.has(element),
+        )
+        // New nodes win over ones from before the swap.
+        const fresh = all.filter((element) => !this.#snapshot.has(element))
         if (fresh.length > 1) {
-          const message = `"${s.key}" is on ${fresh.length} new elements: the first one is the target`
-          this.#host.warn('TRANSITION_KEY', message, s.key)
+          const message = `"${source.key}" is on ${fresh.length} new elements: the first one is the target`
+          this.#host.warn('TRANSITION_KEY', message, source.key)
         }
         // The old page may still be in the DOM ahead of the new one (Barba sync, Vue without
         // mode). An old node hidden in place, like a closed modal, is not a target.
-        to = fresh[0] ?? all.find((el) => el !== s.element && sized(el.getBoundingClientRect()))
+        to =
+          fresh[0] ??
+          all.find(
+            (element) => element !== source.element && sized(element.getBoundingClientRect()),
+          )
       }
-      if (!to && s.element.isConnected) to = s.element
+      if (!to && source.element.isConnected) to = source.element
       if (to) {
         used.add(to)
-        pairs.push([s, to])
-      } else this.#unpaired(s)
+        pairs.push([source, to])
+      } else this.#unpaired(source)
     }
     pairs.sort(([, a], [, b]) => inDocumentOrder(a, b))
-    for (const [i, [s, to]] of pairs.entries()) this.#pairOf(fx, s, to, i)
+    for (const [index, [source, to]] of pairs.entries()) this.#flyPair(effects, source, to, index)
     for (const copy of this.#early.values()) copy.release()
     this.#early.clear()
   }
 
-  #names(): Map<string, Element> {
+  /** view-transition-names of nodes that arrived with the swap, first element per name. */
+  #newNames(): Map<string, Element> {
     const names = new Map<string, Element>()
-    for (const el of document.querySelectorAll(NAMEABLE)) {
-      const name = this.#snapshot.has(el) ? undefined : nameOf(el)
-      if (name && !names.has(name)) names.set(name, el)
+    for (const element of document.querySelectorAll(NAMEABLE)) {
+      const name = this.#snapshot.has(element) ? undefined : viewTransitionName(element)
+      if (name && !names.has(name)) names.set(name, element)
     }
     return names
   }
 
   // A keyed source waits invisibly for a late partner, a named one goes with its DOM. One carried
   // over mid-air has no DOM to go with, so it fades in place and then waits.
-  #unpaired(s: Source): void {
-    const host = this.#host
-    if (s.flight) {
-      s.flight.anchor?.dispose()
-      const f = new FlightImpl(this, s, s.element, s.pose)
-      f.trail = s.trail
-      f.share = s.trail ? (s.share ?? 0) : 0
-      f.toPool = !s.named
-      f.kick = s.flight.speed
-      f.clipKick = s.flight.clipSpeed
-      this.flights.push(f)
+  #unpaired(source: Source): void {
+    if (source.flight) {
+      source.flight.anchor?.dispose()
+      const flight = new FlightImpl(this, source, source.element, source.pose)
+      flight.trail = source.trail
+      flight.share = source.trail ? (source.share ?? 0) : 0
+      flight.toPool = !source.named
+      flight.kick = source.flight.speed
+      flight.clipKick = source.flight.clipSpeed
+      this.flights.push(flight)
       // Same pace as a full crossfade, starting from where its fade got to.
-      this.#fadeOut(f, 'leaving', this.#crossfade * s.pose.opacity)
-    } else if (s.named) s.copy.release()
+      this.#fadeOut(flight, 'leaving', this.#crossfade * source.pose.opacity)
+    } else if (source.named) source.copy.release()
     else if (this.#leave > 0) {
-      const p = new PresenceImpl(this, s.element, s.copy, this.#reduced)
-      p.key = s.key
-      this.leaving.push(p)
-    } else host.pool.add(s.key, s.copy)
+      const presence = new PresenceImpl(this, source.element, source.copy, this.#reduced)
+      presence.key = source.key
+      this.leaving.push(presence)
+    } else this.#host.pool.add(source.key, source.copy)
   }
 
-  #pairOf(fx: EffectsApi, s: Source, to: Element, i: number): void {
-    const self = to === s.element
+  /** Starts the flight of `source` to `to`, the `index`th pair in document order. */
+  #flyPair(effects: EffectsApi, source: Source, to: Element, index: number): void {
+    const self = to === source.element
     const box = to.getBoundingClientRect()
     // A node paired with itself only flies if it moved (FLIP).
-    if (self && (this.#reduced || !moved(s.pose, box))) {
-      this.#drop(s)
+    if (self && (this.#reduced || !moved(source.pose, box))) {
+      this.#drop(source)
       return
     }
-    let target: Copy | undefined = self ? s.copy : undefined
+    // The copy that takes over at `to`: the source itself for a FLIP, none under reduced motion.
+    let target: Copy | undefined = self ? source.copy : undefined
     if (!self && !this.#reduced) {
-      const early = this.#early.get(s.key)
+      const early = this.#early.get(source.key)
       // The copy shown underneath is the target again (double click), so keep it taken.
-      if (s.trail?.element === to && s.trail.state !== 'released') target = s.trail
+      if (source.trail?.element === to && source.trail.state !== 'released') target = source.trail
       else if (early?.element === to) {
         target = early
-        this.#early.delete(s.key)
-      } else target = this.#targetOf(fx, to)
+        this.#early.delete(source.key)
+      } else target = this.#targetOf(effects, to)
     }
-    const trail = s.trail === target ? undefined : s.trail
-    const old = s.flight
-    if (old && target && old.copy === s.copy && old.to === to && old.target === target) {
+    const old = source.flight
+    if (old && target && old.copy === source.copy && old.to === to && old.target === target) {
       // Same pair as in the superseded transition: keep flying from where it was. A holding one
       // lands again in its first frame and waits anew.
       old.owner = this
       old.state = 'flying'
-      old.startAt = -(s.flown ?? 0)
+      old.startAt = -(source.flown ?? 0)
       this.flights.push(old)
       // The old owner has ended and its `ready` callback no longer fires, so subscribe again.
-      this.#ready(old, target)
+      this.#watchReady(old, target)
       return
     }
     old?.anchor?.dispose()
     // Start from where the copy is now: the snapshot when held, the last drawn frame when it
     // followed. A carried copy starts at the alpha its pair covered.
-    const pose = old ? s.pose : (poseOf(s.copy) ?? s.pose)
-    const f = new FlightImpl(this, s, to, pose)
-    f.startAt = i * this.#stagger
-    f.duration = this.#duration
-    f.trail = trail
-    f.share = trail ? (s.share ?? 0) : 0
+    const pose = old ? source.pose : (poseOf(source.copy) ?? source.pose)
+    const flight = new FlightImpl(this, source, to, pose)
+    flight.startAt = index * this.#stagger
+    flight.duration = this.#duration
+    const trail = source.trail === target ? undefined : source.trail
+    flight.trail = trail
+    flight.share = trail ? (source.share ?? 0) : 0
     // The former trail is the target again, so its takeover resumes where it was.
-    if (target && target === s.trail) f.share = f.shareFrom = s.share ?? 0
+    if (target && target === source.trail) flight.share = flight.shareFrom = source.share ?? 0
     if (old) {
       // Cut short mid-flight. Keep its speed and scale the duration by the distance left, with
       // sqrt because that is how time grows with distance at constant acceleration.
-      f.speed = f.kick = old.speed
-      f.clipSpeed = f.clipKick = old.clipSpeed
-      f.lowered = old.lowered
+      flight.speed = flight.kick = old.speed
+      flight.clipSpeed = flight.clipKick = old.clipSpeed
+      flight.lowered = old.lowered
       const whole = travel(old.pose, old.targetBox ?? old.pose)
-      const way = sized(box) ? travel(pose, box) : whole
-      if (whole > 1) f.duration *= Math.min(1, Math.max(SHORTEST, Math.sqrt(way / whole)))
+      const left = sized(box) ? travel(pose, box) : whole
+      if (whole > 1) flight.duration *= Math.min(1, Math.max(SHORTEST, Math.sqrt(left / whole)))
     }
-    this.flights.push(f)
+    this.flights.push(flight)
     if (!target || target.state === 'released') {
       // Reduced motion, or a target this app can't hide because another app took it. The copy
       // fades in place and the target shows its DOM or enters like any other element.
-      this.#fadeOut(f, 'leaving', this.#reduced ? REDUCED : this.#crossfade)
+      this.#fadeOut(flight, 'leaving', this.#reduced ? REDUCED : this.#crossfade)
       return
     }
-    this.#aim(f, to, target, box)
-    if (!self) this.#ready(f, target)
+    this.#aim(flight, to, target, box)
+    if (!self) this.#watchReady(flight, target)
   }
 
-  /** Points the flight at `el` and its copy, tracked live and cut to its clipping ancestor. */
-  #aim(f: FlightImpl, el: Element, target: Copy, box: Box): void {
-    f.anchor?.dispose()
-    f.to = el
-    f.target = target
-    f.anchor = this.#host.app.anchors.track(el, { live: true })
-    f.frame = frameOf(el)
-    f.radius = sized(box) ? radiusOf(el, box) : undefined
+  /** Points the flight at `element` and its copy, tracked live and cut to its clipping ancestor. */
+  #aim(flight: FlightImpl, element: Element, target: Copy, box: Box): void {
+    flight.anchor?.dispose()
+    flight.to = element
+    flight.target = target
+    flight.anchor = this.#host.app.anchors.track(element, { live: true })
+    flight.frame = frameOf(element)
+    flight.radius = sized(box) ? radiusOf(element, box) : undefined
+    flight.warm = false
   }
 
-  #ready(f: FlightImpl, target: Copy): void {
+  /** Marks the flight failed if the target's copy turns out never to draw. */
+  #watchReady(flight: FlightImpl, target: Copy): void {
     void target.ready.then((ready) => {
-      if (ready || f.target !== target || this.#ended) return
-      f.failed = true
+      if (ready || flight.target !== target || this.#ended) return
+      flight.failed = true
       this.#host.app.invalidate()
     })
   }
@@ -588,39 +589,43 @@ export class TransitionImpl implements Transition, Owner {
 
   // Veils new effect elements in view and fades them in once drawable. Under reduced motion
   // nothing flies, so targets enter like the rest.
-  #enterNew(fx: EffectsApi, nodes?: readonly Element[]): void {
+  #enterNew(effects: EffectsApi, nodes?: readonly Element[]): void {
     const known = this.#known
-    if (!(this.#enter > 0) || !known || fx.status.peek() !== 'ready') return
+    if (!(this.#enter > 0) || !known || effects.status.peek() !== 'ready') return
     const { width, height } = this.#host.app.stage
     const skip = new Set([
       ...known,
-      ...(this.#reduced ? [] : this.flights.map((f) => f.to)),
-      ...this.entering.map((p) => p.element),
-      ...[...this.#early.values()].map((c) => c.element),
+      ...(this.#reduced ? [] : this.flights.map((flight) => flight.to)),
+      ...this.entering.map((presence) => presence.element),
+      ...[...this.#early.values()].map((copy) => copy.element),
     ])
-    const list = new Set(nodes ?? effectElements(fx))
-    for (const el of [...list].sort(inDocumentOrder)) {
-      if (skip.has(el) || !el.isConnected) continue
-      if (!inView(el.getBoundingClientRect(), width.peek(), height.peek())) continue
-      const copy = fx.take(el, { veil: true, leave: 'release', signal: this.#host.signal })
+    const candidates = new Set(nodes ?? effectElements(effects))
+    for (const element of [...candidates].sort(inDocumentOrder)) {
+      if (skip.has(element) || !element.isConnected) continue
+      if (!inView(element.getBoundingClientRect(), width.peek(), height.peek())) continue
+      const copy = effects.take(element, {
+        veil: true,
+        leave: 'release',
+        signal: this.#host.signal,
+      })
       if (copy.state === 'released') continue
-      const p = new PresenceImpl(this, el, copy, this.#reduced)
-      p.set(0)
+      const presence = new PresenceImpl(this, element, copy, this.#reduced)
+      presence.set(0)
       // Inside a browser view transition they all come at once with its root crossfade.
-      p.at = this.#native ? 0 : ENTER_AT * this.#duration + ENTER_STEP * this.entering.length
-      this.entering.push(p)
+      presence.at = this.#native ? 0 : ENTER_AT * this.#duration + ENTER_STEP * this.entering.length
+      this.entering.push(presence)
       // No copy coming (off, failed, no effects) or not in time. Show the DOM and let a late
       // copy replace it when ready.
-      const give = (): void => {
-        if (p.shown || p.done || copy.drawable) return
-        p.done = true
+      const giveUp = (): void => {
+        if (presence.shown || presence.done || copy.drawable) return
+        presence.done = true
         copy.release()
         this.#host.app.invalidate()
       }
-      void copy.ready.then((ready) => ready || give())
+      void copy.ready.then((ready) => ready || giveUp())
       const wait = setTimeout(() => {
         this.#waits.delete(wait)
-        give()
+        giveUp()
       }, ENTER_WAIT)
       this.#waits.add(wait)
     }
@@ -638,7 +643,7 @@ export class TransitionImpl implements Transition, Owner {
       this.#leave = NATIVE
     }
     if (key !== null && !this.#settled) {
-      if (this.#sources.some((s) => !s.named && s.key === key)) return
+      if (this.#sources.some((source) => !source.named && source.key === key)) return
       const copy = request.take({ signal: host.signal })
       if (!copy) return
       if (host.options.sources !== 'follow') hold(copy, request.drawn)
@@ -653,10 +658,10 @@ export class TransitionImpl implements Transition, Owner {
 
   /** Ghosts from auto mode or the pool become sources while this window swaps, else released. */
   adopt(items: readonly Source[]): void {
-    for (const s of items) {
-      const taken = this.#sources.some((t) => !t.named && t.key === s.key)
-      if (this.#settled || this.#stopped || taken) s.copy.release()
-      else this.#sources.push(s)
+    for (const item of items) {
+      const taken = this.#sources.some((source) => !source.named && source.key === item.key)
+      if (this.#settled || this.#stopped || taken) item.copy.release()
+      else this.#sources.push(item)
     }
   }
 
@@ -664,74 +669,87 @@ export class TransitionImpl implements Transition, Owner {
   mutated(added: readonly Element[]): void {
     if (this.#settled || this.#ended || !this.#called) return
     this.#rotate()
-    const fx = this.#host.app.effects
-    if (!fx || !added.length || this.#stopped) return
+    const effects = this.#host.app.effects
+    if (!effects || !added.length || this.#stopped) return
     if (!this.#reduced) {
-      const keys = new Set(this.#sources.filter((s) => !s.named).map((s) => s.key))
-      for (const el of added.flatMap((node) => within(node, '[data-dio-key]'))) {
-        const key = el.getAttribute('data-dio-key') as string
-        if (!keys.has(key) || this.#early.has(key) || this.#snapshot.has(el)) continue
-        const copy = this.#targetOf(fx, el)
+      // Veil arriving elements whose key a source waits for, before effects draws them.
+      const keys = new Set(
+        this.#sources.filter((source) => !source.named).map((source) => source.key),
+      )
+      for (const element of added.flatMap((node) => within(node, '[data-dio-key]'))) {
+        const key = element.getAttribute('data-dio-key') as string
+        if (!keys.has(key) || this.#early.has(key) || this.#snapshot.has(element)) continue
+        const copy = this.#targetOf(effects, element)
         if (copy.state !== 'released') this.#early.set(key, copy)
       }
     }
     this.#enterNew(
-      fx,
+      effects,
       added.flatMap((node) => within(node, '[data-dio]')),
     )
   }
 
   /** Moves flights whose target was removed to a node with the same key, now or within `grace`. */
   relink(added: readonly Element[], removed: boolean): void {
-    for (const f of this.flights) {
-      if (f.owner !== this || (f.state !== 'flying' && f.state !== 'holding')) continue
-      if (removed && f.target && f.target !== f.copy && !f.to.isConnected) this.lose(f)
-      if (!f.lost) continue
-      const next = added.flatMap((node) => within(node, sel(f.key)))[0]
-      if (next) this.#retarget(f, next)
+    for (const flight of this.flights) {
+      if (flight.owner !== this || (flight.state !== 'flying' && flight.state !== 'holding'))
+        continue
+      if (removed && flight.target && flight.target !== flight.copy && !flight.to.isConnected)
+        this.lose(flight)
+      if (!flight.lost) continue
+      const next = added.flatMap((node) => within(node, keySelector(flight.key)))[0]
+      if (next) this.#retarget(flight, next)
     }
   }
 
-  lose(f: FlightImpl): void {
-    const to = f.target
-    f.target = undefined
-    f.mixAt = undefined
-    f.shareFrom = 0
+  lose(flight: FlightImpl): void {
+    const target = flight.target
+    flight.target = undefined
+    flight.mixAt = undefined
+    flight.shareFrom = 0
     // If it shows under the copy, it fades out there as a trail and becomes a ghost once its node
     // is gone. Otherwise release it so no veil stays on a node that left.
-    if (to && to !== f.copy && f.share > 0 && !f.trail && to.state !== 'released') f.trail = to
-    else to?.release()
-    const next = [...document.querySelectorAll(sel(f.key))].find((el) => el !== f.from)
-    if (next && this.#retarget(f, next)) return
-    f.lost = true
-    clearTimeout(f.timer)
-    f.timer = setTimeout(() => {
-      if (!f.lost || this.#ended || f.state === 'done') return
-      this.#fadeOut(f, 'leaving', LEAVE)
+    const showsUnder =
+      target &&
+      target !== flight.copy &&
+      flight.share > 0 &&
+      !flight.trail &&
+      target.state !== 'released'
+    if (showsUnder) flight.trail = target
+    else target?.release()
+    const next = [...document.querySelectorAll(keySelector(flight.key))].find(
+      (element) => element !== flight.from,
+    )
+    if (next && this.#retarget(flight, next)) return
+    flight.lost = true
+    clearTimeout(flight.timer)
+    flight.timer = setTimeout(() => {
+      if (!flight.lost || this.#ended || flight.state === 'done') return
+      this.#fadeOut(flight, 'leaving', LEAVE)
       this.#host.app.invalidate()
     }, this.#host.options.grace * 1000)
   }
 
-  #retarget(f: FlightImpl, el: Element): boolean {
-    const fx = this.#host.app.effects
-    if (!fx || this.#ended) return false
-    const target = this.#targetOf(fx, el)
+  #retarget(flight: FlightImpl, element: Element): boolean {
+    const effects = this.#host.app.effects
+    if (!effects || this.#ended) return false
+    const target = this.#targetOf(effects, element)
     if (target.state === 'released') return false
-    clearTimeout(f.timer)
-    const box = el.getBoundingClientRect()
-    this.#aim(f, el, target, box)
-    f.lost = f.failed = false
+    clearTimeout(flight.timer)
+    const box = element.getBoundingClientRect()
+    this.#aim(flight, element, target, box)
+    flight.lost = flight.failed = false
     // A holding flight lands again in its next frame and waits for the new copy.
-    f.state = 'flying'
+    flight.state = 'flying'
     // A node replaced in place (React re-render) changes nothing on screen, so the flight goes on.
     // Anywhere else, start a new flight from where the copy is.
-    if (!f.targetBox || !sized(box) || moved(f.targetBox, box)) {
-      this.#rebase(f)
-      f.targetBox = undefined
-      f.kick = f.speed
-      f.clipKick = f.clipSpeed
+    if (!flight.targetBox || !sized(box) || moved(flight.targetBox, box)) {
+      this.#rebase(flight)
+      flight.targetBox = undefined
+      flight.kick = flight.speed
+      flight.clipKick = flight.clipSpeed
     }
-    this.#ready(f, target)
+    this.#watchReady(flight, target)
     this.#host.app.invalidate()
     return true
   }
@@ -748,16 +766,18 @@ export class TransitionImpl implements Transition, Owner {
       this.phase.value = 'flying'
       if (!this.auto) this.#host.attr('flying')
       // Keep preloads from decoding during the flight.
-      this.#pause = this.#host.app.assets?.pause('transition') ?? noop
+      this.#resumeAssets = this.#host.app.assets?.pause('transition') ?? noop
       this.#animate()
       if (this.#ended) return false
     }
     const touched = this.#touched
     this.#touched = false
     let busy = false
-    for (const f of this.flights) if (f.owner === this) busy = this.#step(f, dt) || busy
-    for (const p of this.leaving) busy = this.#leaveStep(p) || busy
-    for (const p of this.entering) busy = this.#enterStep(p) || busy
+    for (const flight of this.flights) {
+      if (flight.owner === this) busy = this.#step(flight, dt) || busy
+    }
+    for (const presence of this.leaving) busy = this.#leaveStep(presence) || busy
+    for (const presence of this.entering) busy = this.#enterStep(presence) || busy
     if (this.#animating) {
       // A killed timeline never settles. End once everything has landed and nothing was written
       // for QUIET_FRAMES frames.
@@ -797,299 +817,326 @@ export class TransitionImpl implements Transition, Owner {
     if (this.#ended) return
     clearTimeout(this.#animateTimer)
     this.#animating = false
-    for (const f of this.flights) if (f.owner === this && f.state === 'flying') f.advance(1)
+    for (const flight of this.flights) {
+      if (flight.owner === this && flight.state === 'flying') flight.advance(1)
+    }
     this.#unpair()
     this.#host.app.invalidate()
   }
 
-  /** Live box of the target once it has a size. An image without width/height may not yet. */
-  #live(f: FlightImpl): Box | undefined {
-    const a = f.anchor
-    if (a && !f.lost && sized(a)) f.targetBox = boxOf(a)
-    return f.targetBox
+  /**
+   * Live box of the target once it has a size (an image without width/height may not yet), or
+   * the box its own effects pose it to, where its copy will be once let go.
+   */
+  #live(flight: FlightImpl): Box | undefined {
+    const { anchor } = flight
+    const posed = flight.target?.posed
+    if (anchor && !flight.lost && sized(anchor)) {
+      flight.targetBox = boxOf(posed && sized(posed) ? posed : anchor)
+    }
+    return flight.targetBox
   }
 
-  /** Live box of the target's clipping ancestor, or the target box if it has none. */
-  #cut(f: FlightImpl, live: Box): Box {
-    const frame = f.frame?.isConnected ? f.frame.getBoundingClientRect() : undefined
+  /** Live box of the target's clipping ancestor, or the target box if it has none or the pose lifts it. */
+  #cut(flight: FlightImpl, live: Box): Box {
+    const open = flight.target?.posed?.clip === false
+    const frame =
+      flight.frame?.isConnected && !open ? flight.frame.getBoundingClientRect() : undefined
     return frame ? { x: frame.left, y: frame.top, width: frame.width, height: frame.height } : live
   }
 
-  #step(f: FlightImpl, dt: number): boolean {
-    const c = f.copy
-    if (f.state === 'done') return false
+  #step(flight: FlightImpl, dt: number): boolean {
+    const copy = flight.copy
+    if (flight.state === 'done') return false
     // The runtime stopped (render, device loss, remove('effects')) and released the copies.
-    if (c.state === 'released') {
-      f.target?.release()
-      this.#rest(f)
+    if (copy.state === 'released') {
+      flight.target?.release()
+      this.#rest(flight)
       return false
     }
     // Stay over the page even when fading in place, or under reduced motion the new page's copies
     // would cut through it. Fresh flights go above copies that faded in place, so a clicked
     // picture flies over the pair it superseded rather than through it.
-    c.above = f.lowered ? GONE : TOP
-    if (f.state === 'crossfading' || f.state === 'leaving') return this.#fadeStep(f, dt)
-    if (f.target && f.target !== c && !f.to.isConnected) this.lose(f)
-    const first = !f.targetBox
-    const live = this.#live(f)
+    copy.above = flight.lowered ? GONE : TOP
+    if (flight.state === 'crossfading' || flight.state === 'leaving')
+      return this.#fadeStep(flight, dt)
+    if (flight.target && flight.target !== copy && !flight.to.isConnected) this.lose(flight)
+    const first = !flight.targetBox
+    const live = this.#live(flight)
     // Target lost. The copy stays put with its clock paused until a partner comes or `grace`
     // runs out.
-    if (f.lost) {
-      f.startAt += dt
-      f.speed = f.clipSpeed = undefined
+    if (flight.lost) {
+      flight.startAt += dt
+      flight.speed = flight.clipSpeed = undefined
       return true
     }
-    if (live && first) f.radius ??= radiusOf(f.to, live)
-    const to = live ?? f.pose
+    // The target's effects posed it, or stopped: a new place to land, flown to from here.
+    const posed = flight.target?.posed
+    const reposed = !!live && !first && flight.posed !== !!posed
+    flight.posed = !!posed
+    if (posed) flight.radius = posed.radius
+    else if (live && reposed) flight.radius = radiusOf(flight.to, live)
+    else if (live && first) flight.radius ??= radiusOf(flight.to, live)
+    if (flight.state === 'holding' && live && (first || reposed)) {
+      // Got its size or its pose only after the whole flight. Restart from where the copy waited.
+      clearTimeout(flight.timer)
+      flight.state = 'flying'
+      this.#rebase(flight)
+      return true
+    }
+    const to = live ?? flight.pose
     // Land at the target's CSS opacity. A FLIP keeps its own.
-    const alpha = (f.target?.cssOpacity ?? 1) * f.opacity
-    if (f.state === 'holding' && live && first) {
-      // Got its size only after the whole flight. Restart from where the copy waited.
-      clearTimeout(f.timer)
-      f.state = 'flying'
-      this.#rebase(f)
-      return true
-    }
+    const alpha = (flight.target?.cssOpacity ?? 1) * flight.opacity
     // The clip goes from the source's to the target's. A missing clip means the box itself.
-    const cut = live ? this.#cut(f, live) : (f.pose.clip ?? f.pose)
-    if (f.state === 'holding') {
-      c.box = to
-      c.crop = flightCrop(f, to, to, 1)
-      c.clip = cut
-      c.radius = f.radius ?? f.pose.radius
-      f.speed = f.clipSpeed = undefined
-      this.#blend(f, undefined, alpha, dt)
-      this.#land(f)
-    } else this.#flyStep(f, dt, to, !!live && first, cut, alpha)
-    return (f.state as FlightState) !== 'done'
+    const cut = live ? this.#cut(flight, live) : (flight.pose.clip ?? flight.pose)
+    if (flight.state === 'holding') {
+      // Landed, waiting for the target's copy: stay on the target.
+      copy.box = to
+      copy.crop = flightCrop(flight, to, to, 1)
+      copy.clip = cut
+      copy.radius = flight.radius ?? flight.pose.radius
+      flight.speed = flight.clipSpeed = undefined
+      this.#blend(flight, undefined, alpha, dt)
+      this.#land(flight)
+    } else this.#flyStep(flight, dt, to, !!live && (first || reposed), cut, alpha)
+    flight.warm = !!flight.target?.drawable
+    return (flight.state as FlightState) !== 'done'
   }
 
-  // `to` is the target's live box or the source pose. `late` means it got its size this frame.
-  #flyStep(f: FlightImpl, dt: number, to: Box, late: boolean, cut: Box, alpha: number): void {
-    const c = f.copy
+  // `to` is the target's live box or the source pose. `late` means it got its size or its pose
+  // this frame.
+  #flyStep(flight: FlightImpl, dt: number, to: Box, late: boolean, cut: Box, alpha: number): void {
+    const copy = flight.copy
     const animated = !!this.#options.animate
-    let progress = clamp(f.progress)
+    let progress = clamp(flight.progress)
     let eased = progress
     if (!animated) {
-      const t = this.#clock - f.startAt
+      const elapsed = this.#clock - flight.startAt
       // `duration: 0` lands at the start. 0 / 0 would draw nothing for a frame.
-      progress = f.duration > 0 ? clamp(t / f.duration) : +(t >= 0)
-      f.advance(progress)
+      progress = flight.duration > 0 ? clamp(elapsed / flight.duration) : +(elapsed >= 0)
+      flight.advance(progress)
       eased = (this.#options.ease ?? this.#host.options.ease)(progress)
     }
     // Sized late. Continue from where the copy is so it doesn't jump.
     if (late && eased > 0) {
-      f.pose = here(f)
-      f.poseAt = eased
+      flight.pose = here(flight)
+      flight.poseAt = eased
     }
-    const k = f.poseAt === 0 ? eased : f.poseAt < 1 ? (eased - f.poseAt) / (1 - f.poseAt) : 1
-    let box = lerpBox(f.pose, to, k)
-    let clip = lerpBox(f.pose.clip ?? f.pose, cut, k)
+    // Share of the way from `pose` to `to`, measured from the progress `pose` was taken at.
+    const { poseAt } = flight
+    const t = poseAt === 0 ? eased : poseAt < 1 ? (eased - poseAt) / (1 - poseAt) : 1
+    let box = lerpBox(flight.pose, to, t)
+    let clip = lerpBox(flight.pose.clip ?? flight.pose, cut, t)
     // A carried velocity keeps the copy moving and dies out, so there is no dead stop.
-    const kick = f.kick && !animated ? f.duration * progress * (1 - progress) ** DAMP : 0
-    if (kick > 0 && f.kick) {
-      box = push(box, f.kick, kick)
-      clip = push(clip, f.clipKick ?? f.kick, kick)
+    const kick = flight.kick && !animated ? flight.duration * progress * (1 - progress) ** DAMP : 0
+    if (kick > 0 && flight.kick) {
+      box = push(box, flight.kick, kick)
+      clip = push(clip, flight.clipKick ?? flight.kick, kick)
     }
-    if (dt > 0 && progress > 0 && c.box) f.speed = rate(c.box, box, dt)
-    if (dt > 0 && progress > 0 && c.clip) f.clipSpeed = rate(c.clip, clip, dt)
-    c.box = box
-    c.crop = flightCrop(f, to, box, k)
-    c.clip = clip
-    c.radius = lerp(f.pose.radius, f.radius ?? f.pose.radius, k)
-    this.#blend(f, progress, lerp(f.pose.opacity, alpha, k), dt)
-    if (progress >= 1) this.#land(f)
+    if (dt > 0 && progress > 0 && copy.box) flight.speed = rate(copy.box, box, dt)
+    if (dt > 0 && progress > 0 && copy.clip) flight.clipSpeed = rate(copy.clip, clip, dt)
+    copy.box = box
+    copy.crop = flightCrop(flight, to, box, t)
+    copy.clip = clip
+    copy.radius = lerp(flight.pose.radius, flight.radius ?? flight.pose.radius, t)
+    this.#blend(flight, progress, lerp(flight.pose.opacity, alpha, t), dt)
+    if (progress >= 1) this.#land(flight)
   }
 
   /** Finishes the takeover at the target, or fades out together with what is under it. */
-  #fadeStep(f: FlightImpl, dt: number): boolean {
-    const c = f.copy
-    f.fadeTime += dt
-    const k = f.fadeSpan > 0 ? clamp(f.fadeTime / f.fadeSpan) : 1
-    const live = f.state === 'crossfading' ? this.#live(f) : undefined
+  #fadeStep(flight: FlightImpl, dt: number): boolean {
+    const copy = flight.copy
+    flight.fadeTime += dt
+    const t = flight.fadeSpan > 0 ? clamp(flight.fadeTime / flight.fadeSpan) : 1
+    const live = flight.state === 'crossfading' ? this.#live(flight) : undefined
     if (live) {
-      place(c, live)
-      c.clip = this.#cut(f, live)
-    } else if (f.kick && !this.#reduced) {
-      // Distance covered at speed v * (1 - k)^COAST, with v carried in from a superseded flight.
-      const way = (f.fadeSpan * (1 - (1 - k) ** (COAST + 1))) / (COAST + 1)
-      const box = push(f.pose, f.kick, way)
-      const clip = push(f.pose.clip ?? f.pose, f.clipKick ?? f.kick, way)
-      if (dt > 0 && c.box) f.speed = rate(c.box, box, dt)
-      if (dt > 0 && c.clip) f.clipSpeed = rate(c.clip, clip, dt)
-      place(c, box)
-      c.clip = clip
+      place(copy, live)
+      copy.clip = this.#cut(flight, live)
+    } else if (flight.kick && !this.#reduced) {
+      // Coast on with the velocity carried in, slowing as v * (1 - t)^COAST to a stop.
+      const distance = (flight.fadeSpan * (1 - (1 - t) ** (COAST + 1))) / (COAST + 1)
+      const box = push(flight.pose, flight.kick, distance)
+      const clip = push(flight.pose.clip ?? flight.pose, flight.clipKick ?? flight.kick, distance)
+      if (dt > 0 && copy.box) flight.speed = rate(copy.box, box, dt)
+      if (dt > 0 && copy.clip) flight.clipSpeed = rate(copy.clip, clip, dt)
+      place(copy, box)
+      copy.clip = clip
     }
-    const to = f.target
-    if (f.state === 'crossfading' && to && to !== c) {
-      f.share = lerp(f.landedShare, 1, k)
-      f.cover = lerp(f.fadeFrom, to.cssOpacity, k)
-      show(f, to)
+    const target = flight.target
+    if (flight.state === 'crossfading' && target && target !== copy) {
+      flight.share = lerp(flight.landedShare, 1, t)
+      flight.cover = lerp(flight.fadeFrom, target.cssOpacity, t)
+      show(flight, target)
     } else {
       // Whatever shows underneath fades out with it in the same mix.
-      if (f.trail?.state === 'released') this.#untrail(f)
-      f.cover = f.fadeFrom * (1 - k)
-      show(f, f.trail)
+      if (flight.trail?.state === 'released') this.#untrail(flight)
+      flight.cover = flight.fadeFrom * (1 - t)
+      show(flight, flight.trail)
     }
-    if (k < 1) return true
-    this.#rest(f)
+    if (t < 1) return true
+    this.#rest(flight)
     return false
   }
 
-  #rebase(f: FlightImpl): void {
-    f.pose = here(f)
-    f.poseAt = 0
-    f.startAt = this.#clock
-    f.advance(0)
+  /** Starts the flight over from where its copy is now. */
+  #rebase(flight: FlightImpl): void {
+    flight.pose = here(flight)
+    flight.poseAt = 0
+    flight.startAt = this.#clock
+    flight.advance(0)
   }
 
   // Picks what shows under the flying copy. A former target fades out first, then the target takes
   // over once drawable. With `progress` undefined (holding) the takeover waits for the landing.
-  #blend(f: FlightImpl, progress: number | undefined, cover: number, dt: number): void {
-    const to = f.target !== f.copy ? f.target : undefined
+  #blend(flight: FlightImpl, progress: number | undefined, cover: number, dt: number): void {
+    const target = flight.target !== flight.copy ? flight.target : undefined
     let under: Copy | undefined
-    f.cover = cover
-    if (f.trail) {
-      f.share = this.#crossfade > 0 ? f.share - dt / this.#crossfade : 0
-      if (f.share > 0 && f.trail.state !== 'released') under = f.trail
-      else this.#untrail(f)
-    } else if (progress !== undefined && to?.drawable && !f.failed) {
-      f.mixAt ??= Math.max(progress, MIX_FROM)
-      const mixTo = Math.max(MIX_TO, f.mixAt + MIX_MIN)
-      const next = lerp(f.shareFrom, 1, smooth(f.mixAt, mixTo, progress))
+    flight.cover = cover
+    if (flight.trail) {
+      flight.share = this.#crossfade > 0 ? flight.share - dt / this.#crossfade : 0
+      if (flight.share > 0 && flight.trail.state !== 'released') under = flight.trail
+      else this.#untrail(flight)
+    } else if (progress !== undefined && target?.drawable && !flight.failed) {
+      flight.mixAt ??= Math.max(progress, MIX_FROM)
+      const mixTo = Math.max(MIX_TO, flight.mixAt + MIX_MIN)
+      const next = lerp(flight.shareFrom, 1, smooth(flight.mixAt, mixTo, progress))
       // Cap at twice the crossfade rate so a progress jump (a stall, a timeline setting 1) doesn't
       // swap the picture in one frame. Whatever is left plays after the landing.
-      const most = this.#crossfade > 0 ? f.share + (2 * dt) / this.#crossfade : 1
-      f.share = Math.min(next, most)
-      if (f.share > 0) under = to
+      const most = this.#crossfade > 0 ? flight.share + (2 * dt) / this.#crossfade : 1
+      flight.share = Math.min(next, most)
+      if (flight.share > 0) under = target
     } else {
-      f.share = f.shareFrom = 0
-      f.mixAt = undefined
+      flight.share = flight.shareFrom = 0
+      flight.mixAt = undefined
     }
-    if (to && to !== under) {
-      to.veil = true
-      to.leave = 'release'
+    if (target && target !== under) {
+      target.veil = true
+      target.leave = 'release'
     }
-    show(f, under)
+    show(flight, under)
   }
 
-  #untrail(f: FlightImpl): void {
-    const trail = f.trail
-    f.trail = undefined
-    f.share = 0
+  #untrail(flight: FlightImpl): void {
+    const trail = flight.trail
+    flight.trail = undefined
+    flight.share = 0
     if (trail) this.#host.remnant(trail, this.gen)
   }
 
   // A takeover finished in flight releases both copies with no visible change. An unfinished one
   // plays out as a crossfade in place. A target that isn't ready yet holds the copy there.
-  #land(f: FlightImpl): void {
-    const c = f.copy
-    const to = f.target
-    if (!to || to === c) {
+  #land(flight: FlightImpl): void {
+    const target = flight.target
+    if (!target || target === flight.copy) {
       this.#landings++
-      this.#rest(f)
+      this.#rest(flight)
       return
     }
-    // A former target still fading out under the copy goes first.
-    if (f.trail) this.#hold(f)
-    else if (to.drawable || f.failed) {
-      this.#landings++
-      if (!to.drawable) {
-        to.release()
-        f.target = undefined
-        f.share = 0
-      }
-      const left = f.target ? Math.max(1 - f.share, Math.abs(to.cssOpacity - f.cover)) : 1
-      if (left < TAKEN) {
-        this.#rest(f)
-        return
-      }
-      this.#fadeOut(f, 'crossfading', this.#crossfade * left)
-      f.landedShare = f.share
-      if (f.target) show(f, to)
-    } else this.#hold(f)
+    // A former target still fading out under the copy goes first. One drawable only since this
+    // frame has not run its effects yet, so it waits a frame for the pose they may give it.
+    if (flight.trail || !((target.drawable && flight.warm) || flight.failed)) {
+      this.#hold(flight)
+      return
+    }
+    this.#landings++
+    if (!target.drawable) {
+      target.release()
+      flight.target = undefined
+      flight.share = 0
+    }
+    const left = flight.target
+      ? Math.max(1 - flight.share, Math.abs(target.cssOpacity - flight.cover))
+      : 1
+    if (left < TAKEN) {
+      this.#rest(flight)
+      return
+    }
+    this.#fadeOut(flight, 'crossfading', this.#crossfade * left)
+    flight.landedShare = flight.share
+    if (flight.target) show(flight, target)
   }
 
-  #hold(f: FlightImpl): void {
-    if (f.state === 'holding') return
-    f.state = 'holding'
-    f.timer = setTimeout(() => {
-      if (f.state !== 'holding' || this.#ended) return
-      f.failed = true
+  #hold(flight: FlightImpl): void {
+    if (flight.state === 'holding') return
+    flight.state = 'holding'
+    flight.timer = setTimeout(() => {
+      if (flight.state !== 'holding' || this.#ended) return
+      flight.failed = true
       this.#host.app.invalidate()
     }, this.#wait * 1000)
   }
 
-  #fadeOut(f: FlightImpl, state: 'crossfading' | 'leaving', span: number): void {
-    clearTimeout(f.timer)
-    f.state = state
-    if (state === 'leaving') f.lowered = true
-    f.fadeTime = 0
-    f.fadeSpan = span
-    f.fadeFrom = f.cover
+  #fadeOut(flight: FlightImpl, state: 'crossfading' | 'leaving', seconds: number): void {
+    clearTimeout(flight.timer)
+    flight.state = state
+    if (state === 'leaving') flight.lowered = true
+    flight.fadeTime = 0
+    flight.fadeSpan = seconds
+    flight.fadeFrom = flight.cover
   }
 
   /** Stops steps and timers. The anchor is kept only if the flight is carried over. */
-  #halt(f: FlightImpl, carried = false): void {
-    f.state = 'done'
-    clearTimeout(f.timer)
+  #halt(flight: FlightImpl, carried = false): void {
+    flight.state = 'done'
+    clearTimeout(flight.timer)
     if (carried) return
-    f.anchor?.dispose()
-    f.anchor = undefined
+    flight.anchor?.dispose()
+    flight.anchor = undefined
   }
 
   // The flying copy is released, or kept hidden as a remnant while its element is still in the
   // document. The target's copy goes back to following its DOM.
-  #rest(f: FlightImpl): void {
-    this.#halt(f)
-    this.#untrail(f)
-    const to = f.target
-    if (to && to !== f.copy) {
-      to.veil = false
-      to.release()
-      f.target = undefined
+  #rest(flight: FlightImpl): void {
+    this.#halt(flight)
+    this.#untrail(flight)
+    const target = flight.target
+    if (target && target !== flight.copy) {
+      target.veil = false
+      target.release()
+      flight.target = undefined
     }
-    if (to !== f.copy && f.copy.state !== 'ghost' && f.from.isConnected) {
-      this.#host.remnant(f.copy, this.gen, f.to)
-    } else if (f.toPool) this.#host.pool.add(f.key, f.copy)
-    else f.copy.release()
+    if (target !== flight.copy && flight.copy.state !== 'ghost' && flight.from.isConnected) {
+      this.#host.remnant(flight.copy, this.gen, flight.to)
+    } else if (flight.toPool) this.#host.pool.add(flight.key, flight.copy)
+    else flight.copy.release()
   }
 
-  #leaveStep(p: PresenceImpl): boolean {
-    if (p.copy.state === 'released') p.done = true
-    if (p.done) return false
-    if (this.#options.animate) return p.presence > 0
-    const presence = this.#leave > 0 ? clamp(1 - this.#clock / this.#leave) : 0
-    p.set(presence)
-    if (presence > 0) return true
-    this.#quit(p)
+  #leaveStep(presence: PresenceImpl): boolean {
+    if (presence.copy.state === 'released') presence.done = true
+    if (presence.done) return false
+    if (this.#options.animate) return presence.presence > 0
+    const level = this.#leave > 0 ? clamp(1 - this.#clock / this.#leave) : 0
+    presence.set(level)
+    if (level > 0) return true
+    this.#quit(presence)
     return false
   }
 
-  #quit(p: PresenceImpl): void {
-    p.done = true
-    if (p.key !== undefined) this.#host.pool.add(p.key, p.copy)
-    else p.copy.release()
+  /** A faded leaving copy waits in the pool if it has a key, else it goes. */
+  #quit(presence: PresenceImpl): void {
+    presence.done = true
+    if (presence.key !== undefined) this.#host.pool.add(presence.key, presence.copy)
+    else presence.copy.release()
   }
 
-  #enterStep(p: PresenceImpl): boolean {
-    const c = p.copy
-    if (c.state === 'released') p.done = true
-    if (p.done) return false
-    if (!p.shown) {
-      if (c.drawable && (this.#options.animate || this.#clock >= p.at)) {
-        c.veil = false
-        p.shown = true
-        p.at = this.#clock
+  #enterStep(presence: PresenceImpl): boolean {
+    const copy = presence.copy
+    if (copy.state === 'released') presence.done = true
+    if (presence.done) return false
+    if (!presence.shown) {
+      if (copy.drawable && (this.#options.animate || this.#clock >= presence.at)) {
+        copy.veil = false
+        presence.shown = true
+        presence.at = this.#clock
       }
       return true
     }
-    if (this.#options.animate) return p.presence < 1
-    const presence = this.#enter > 0 ? clamp((this.#clock - p.at) / this.#enter) : 1
-    p.set(presence)
-    if (presence < 1) return true
-    p.done = true
-    c.release()
+    if (this.#options.animate) return presence.presence < 1
+    const level = this.#enter > 0 ? clamp((this.#clock - presence.at) / this.#enter) : 1
+    presence.set(level)
+    if (level < 1) return true
+    presence.done = true
+    copy.release()
     return false
   }
 
@@ -1121,10 +1168,11 @@ export class TransitionImpl implements Transition, Owner {
       this.#stopped = status
       return
     }
-    for (const f of this.flights) {
-      if (f.owner !== this || f.state === 'done') continue
-      if ((f.state === 'flying' || f.state === 'holding') && !f.lost) this.#landings++
-      this.#rest(f)
+    for (const flight of this.flights) {
+      if (flight.owner !== this || flight.state === 'done') continue
+      const inAir = flight.state === 'flying' || flight.state === 'holding'
+      if (inAir && !flight.lost) this.#landings++
+      this.#rest(flight)
     }
     this.#unpair()
     this.#end(status)
@@ -1132,32 +1180,32 @@ export class TransitionImpl implements Transition, Owner {
 
   /** Leaving copies go or wait in the pool, entering ones show. */
   #unpair(): void {
-    for (const p of this.leaving) if (!p.done) this.#quit(p)
-    for (const p of this.entering) {
-      if (p.done) continue
-      p.done = true
-      p.copy.veil = false
-      p.copy.release()
+    for (const presence of this.leaving) if (!presence.done) this.#quit(presence)
+    for (const presence of this.entering) {
+      if (presence.done) continue
+      presence.done = true
+      presence.copy.veil = false
+      presence.copy.release()
     }
   }
 
   /** Lets go of every copy still held. Connected ones live on as before, ghosts go. */
   #release(): void {
-    for (const s of this.#sources) this.#drop(s)
+    for (const source of this.#sources) this.#drop(source)
     this.#sources = []
     for (const copy of this.#early.values()) copy.release()
     this.#early.clear()
-    for (const f of this.flights) {
-      if (f.owner !== this || f.state === 'done') continue
-      this.#halt(f)
-      f.target?.release()
-      f.copy.release()
-      this.#untrail(f)
+    for (const flight of this.flights) {
+      if (flight.owner !== this || flight.state === 'done') continue
+      this.#halt(flight)
+      flight.target?.release()
+      flight.copy.release()
+      this.#untrail(flight)
     }
-    for (const p of [...this.leaving, ...this.entering]) {
-      if (p.done) continue
-      p.done = true
-      p.copy.release()
+    for (const presence of [...this.leaving, ...this.entering]) {
+      if (presence.done) continue
+      presence.done = true
+      presence.copy.release()
     }
   }
 
@@ -1169,24 +1217,27 @@ export class TransitionImpl implements Transition, Owner {
     if (this.#ended) return carried
     for (const copy of this.#early.values()) host.remnant(copy, this.gen)
     this.#early.clear()
-    for (const f of this.flights) {
-      if (f.owner !== this || f.state === 'done') continue
-      const source = this.#carry(f)
+    for (const flight of this.flights) {
+      if (flight.owner !== this || flight.state === 'done') continue
+      const source = this.#carry(flight)
       if (source) carried.push(source)
     }
-    const rest = (p: PresenceImpl, to: number, span: number, then: () => void): void => {
-      p.done = true
-      host.fade(p.copy, p.prop, p.scale * to, span * Math.abs(to - p.presence), then)
+    // The plugin finishes the fade from where it is, at the same pace.
+    const fadeOn = (presence: PresenceImpl, to: number, pace: number, then: () => void): void => {
+      presence.done = true
+      const seconds = pace * Math.abs(to - presence.presence)
+      host.fade(presence.copy, presence.prop, presence.scale * to, seconds, then)
     }
-    for (const p of this.leaving) {
-      if (!p.done) rest(p, 0, this.#leave || LEAVE, () => this.#quit(p))
+    for (const presence of this.leaving) {
+      if (!presence.done) fadeOn(presence, 0, this.#leave || LEAVE, () => this.#quit(presence))
     }
-    for (const p of this.entering) {
-      if (p.done) continue
-      if (p.shown) rest(p, 1, this.#enter || LEAVE, () => p.copy.release())
-      else {
-        p.done = true
-        host.remnant(p.copy, this.gen)
+    for (const presence of this.entering) {
+      if (presence.done) continue
+      if (presence.shown) {
+        fadeOn(presence, 1, this.#enter || LEAVE, () => presence.copy.release())
+      } else {
+        presence.done = true
+        host.remnant(presence.copy, this.gen)
       }
     }
     this.#end('superseded')
@@ -1197,54 +1248,54 @@ export class TransitionImpl implements Transition, Owner {
    * Turns a superseded flight into a source for the next transition. If a target shows under it,
    * whichever of the two shows more flies on and the other trails, so the picture doesn't change.
    */
-  #carry(f: FlightImpl): Source | undefined {
-    const c = f.copy
-    if (f.state === 'leaving' && c.state !== 'ghost' && f.from.isConnected) {
+  #carry(flight: FlightImpl): Source | undefined {
+    const copy = flight.copy
+    if (flight.state === 'leaving' && copy.state !== 'ghost' && flight.from.isConnected) {
       // Source still in the document (Barba sync). Make it a remnant the next transition may fly
       // back to. If it kept fading it would stay taken past that transition.
-      this.#halt(f)
-      this.#host.remnant(c, this.gen)
-      this.#untrail(f)
+      this.#halt(flight)
+      this.#host.remnant(copy, this.gen)
+      this.#untrail(flight)
       return undefined
     }
-    const to = f.target !== c ? f.target : undefined
-    let copy = c
-    let element = f.from
-    let trail = f.trail
-    let share = trail ? f.share : 0
-    if (to && !trail && f.share > 0 && to.state !== 'released') {
-      to.leave = 'ghost'
-      if (f.share < 0.5) {
-        trail = to
-        share = f.share
+    const target = flight.target !== copy ? flight.target : undefined
+    let leader = copy
+    let element = flight.from
+    let trail = flight.trail
+    let share = trail ? flight.share : 0
+    if (target && !trail && flight.share > 0 && target.state !== 'released') {
+      target.leave = 'ghost'
+      if (flight.share < 0.5) {
+        trail = target
+        share = flight.share
       } else {
-        copy = to
-        element = f.to
-        trail = c
-        share = 1 - f.share
+        leader = target
+        element = flight.to
+        trail = copy
+        share = 1 - flight.share
       }
-    } else if (to) {
-      if (f.to.isConnected) this.#host.remnant(to, this.gen)
-      else to.release()
+    } else if (target) {
+      if (flight.to.isConnected) this.#host.remnant(target, this.gen)
+      else target.release()
     }
-    const pose = poseOf(copy)
-    if (pose && copy.state !== 'released') {
+    const pose = poseOf(leader)
+    if (pose && leader.state !== 'released') {
       // Keep the anchor. The next transition either flies it on or disposes of it.
-      this.#halt(f, true)
+      this.#halt(flight, true)
       return {
-        key: f.key,
-        named: f.named,
+        key: flight.key,
+        named: flight.named,
         element,
-        copy,
-        pose: { ...pose, opacity: f.cover },
-        flight: f,
-        flown: this.#clock - f.startAt,
+        copy: leader,
+        pose: { ...pose, opacity: flight.cover },
+        flight,
+        flown: this.#clock - flight.startAt,
         trail,
         share,
       }
     }
-    this.#halt(f)
-    copy.release()
+    this.#halt(flight)
+    leader.release()
     if (trail) this.#host.remnant(trail, this.gen)
     return undefined
   }
@@ -1254,8 +1305,8 @@ export class TransitionImpl implements Transition, Owner {
     this.#ended = true
     clearTimeout(this.#swapTimer)
     clearTimeout(this.#animateTimer)
-    this.#offAbort()
-    this.#pause()
+    this.#removeAbortListener()
+    this.#resumeAssets()
     const host = this.#host
     if (status !== 'superseded') {
       // A superseded transition hands its entering copies on together with their waits.
@@ -1270,7 +1321,7 @@ export class TransitionImpl implements Transition, Owner {
     const result: TransitionResult =
       error === undefined ? { status, flights } : { status, flights, error }
     host.app.emit('transition:end', { transition: this, result })
-    this.#done(result)
+    this.#resolveFinished(result)
   }
 }
 

@@ -3,10 +3,10 @@ import {
   collectEntries,
   cycleError,
   type Entry,
+  LAYER_RUNTIME,
   missingHint,
   orderPlugins,
   type PluginRecord,
-  RESERVED,
   resolveEntries,
 } from './config'
 import { DioramaError, isDioramaError, messageOf, toDioramaError } from './errors'
@@ -15,204 +15,75 @@ import { HookBus } from './hooks'
 import { LoopImpl } from './loop'
 import { definitionOf, isPreset, refName } from './plugin'
 import { Owner } from './scope'
-import { ownedEffect, signal } from './signals'
+import { signal } from './signals'
 import type {
   AnyPlugin,
   AppOptions,
   AppState,
-  Cleanup,
   DependencyRef,
   ErrorReport,
   ErrorSource,
-  FrameDriver,
-  FrameProfiler,
   Logger,
-  LoopSettings,
-  Off,
-  OrderOptions,
   PluginStatus,
-  ReadonlySignal,
   RemoveOptions,
-  StagePosition,
-  System,
-  SystemHandle,
+  Signal,
 } from './types'
 import { createLogger, isThenable, noop, resolved, shallowEqual } from './util'
+import {
+  describe,
+  isReserved,
+  KERNEL,
+  OWNER,
+  ROOT_METHODS,
+  SCOPE_METHODS,
+  VIEW_PROTO,
+  type View,
+} from './view'
 
-const OWNER: unique symbol = Symbol('diorama.owner') as never
-const KERNEL: unique symbol = Symbol('diorama.kernel') as never
+/** `setTimeout` fires at once for longer delays, so such timeouts are not set at all. */
 const MAX_TIMER_MS = 2 ** 31 - 1
-
-interface View {
-  readonly [OWNER]: Owner
-  readonly [KERNEL]: Kernel
-}
+/** Seconds a setup may take unless `setupTimeout` says otherwise. */
+const DEFAULT_SETUP_TIMEOUT = 30
 
 const aborted = (plugin?: string): DioramaError =>
   new DioramaError('ABORTED', 'start was aborted', { plugin })
 const destroyed = (): DioramaError => new DioramaError('APP_DESTROYED', 'the app is destroyed')
 
-// Views share one prototype and reach their kernel and owner through two symbols, so a scope
-// per entity stays cheap and a call allocates nothing.
-const kernelOf = (view: unknown): Kernel => (view as View)[KERNEL]
-const ownerOf = (view: unknown): Owner => (view as View)[OWNER]
-
-const VIEW_METHODS = {
-  use(entry: unknown): Promise<unknown> {
-    return kernelOf(this).use(entry, ownerOf(this))
-  },
-  remove(ref: DependencyRef, options?: RemoveOptions): Promise<boolean> {
-    return kernelOf(this).remove(ref, options, ownerOf(this))
-  },
-  has(ref: DependencyRef): boolean {
-    return kernelOf(this).has(ref)
-  },
-  get(ref: DependencyRef): unknown {
-    return kernelOf(this).service(ownerOf(this), ref, true)
-  },
-  find(ref: DependencyRef): unknown {
-    return kernelOf(this).service(ownerOf(this), ref, false)
-  },
-  on(name: string, listener: (payload: unknown) => unknown): Off {
-    return kernelOf(this).events.on(name, listener, ownerOf(this), false)
-  },
-  once(name: string, listener: (payload: unknown) => unknown): Off {
-    return kernelOf(this).events.on(name, listener, ownerOf(this), true)
-  },
-  emit(name: string, payload?: unknown): void {
-    if (!ownerOf(this).disposed) kernelOf(this).events.emit(name, payload)
-  },
-  hook(name: string, handler: (v: unknown, c: unknown) => unknown, options?: OrderOptions): Off {
-    return kernelOf(this).hooks.add(name, handler, ownerOf(this), options)
-  },
-  callHook(name: string, value: unknown, context?: unknown): unknown {
-    return ownerOf(this).disposed ? value : kernelOf(this).hooks.call(name, value, context)
-  },
-  callHookAsync(name: string, value: unknown, context?: unknown): Promise<unknown> {
-    return ownerOf(this).disposed
-      ? Promise.resolve(value)
-      : kernelOf(this).hooks.callAsync(name, value, context)
-  },
-  hookVersion(name: string): number {
-    return kernelOf(this).hooks.version(name)
-  },
-  get loop(): LoopImpl {
-    return kernelOf(this).loop
-  },
-  system(stage: string, run: System, options?: OrderOptions): SystemHandle {
-    return kernelOf(this).loop.system(stage, run, options, ownerOf(this))
-  },
-  addStage(name: string, position: StagePosition): Off {
-    return kernelOf(this).loop.addStage(name, position, ownerOf(this))
-  },
-  invalidate(): void {
-    const o = ownerOf(this)
-    if (!o.disposed) kernelOf(this).loop.invalidate(o)
-  },
-  keepAwake(seconds: number): void {
-    const o = ownerOf(this)
-    if (!o.disposed) kernelOf(this).loop.keepAwake(o, seconds)
-  },
-  hold(): Off {
-    return kernelOf(this).loop.hold(ownerOf(this))
-  },
-  pause(): Off {
-    return kernelOf(this).loop.pause(ownerOf(this))
-  },
-  overrideLoop(settings: LoopSettings): Off {
-    return kernelOf(this).loop.overrideLoop(ownerOf(this), settings)
-  },
-  setDriver(driver: FrameDriver): Off {
-    return kernelOf(this).loop.setDriver(ownerOf(this), driver)
-  },
-  profile(profiler: FrameProfiler): Off {
-    return kernelOf(this).loop.profile(ownerOf(this), profiler)
-  },
-  effect(fn: () => unknown): Off {
-    const k = kernelOf(this)
-    const o = ownerOf(this)
-    return o.open() ? o.add(ownedEffect(fn, (e) => k.report(e, 'effect', o))) : noop
-  },
-  scope(): unknown {
-    return kernelOf(this).view(ownerOf(this).child(), true)
-  },
-  onDispose(cleanup: Cleanup): Off {
-    return ownerOf(this).add(typeof cleanup === 'function' ? cleanup : () => cleanup.dispose())
-  },
-  get abortSignal(): AbortSignal {
-    return ownerOf(this).signal
-  },
-  get log(): Logger {
-    return ownerOf(this).log
-  },
-  report(error: unknown, target?: string): void {
-    const o = ownerOf(this)
-    // An AbortError after this view's own abort is the expected outcome, not a failure.
-    if ((error as { name?: unknown } | null)?.name === 'AbortError' && o.signal.aborted) return
-    kernelOf(this).report(error, 'report', o, target)
-  },
-}
-
-const ROOT_METHODS = {
-  get name(): string {
-    return kernelOf(this).name
-  },
-  get state(): ReadonlySignal<AppState> {
-    return kernelOf(this).state
-  },
-  start(): Promise<unknown> {
-    return kernelOf(this).start()
-  },
-  destroy(): Promise<void> {
-    return kernelOf(this).destroy()
-  },
-}
-
-const SCOPE_METHODS = {
-  dispose(): Promise<void> {
-    return ownerOf(this).dispose()
-  },
-  get disposed(): boolean {
-    return ownerOf(this).disposed
-  },
-}
-
-const describe = (methods: object): PropertyDescriptorMap =>
-  Object.getOwnPropertyDescriptors(methods)
-const VIEW_PROTO: object = Object.defineProperties({}, describe(VIEW_METHODS))
-
-// Check the method objects, not a live view, which also carries service getters.
-const isReserved = (name: string): boolean =>
-  name in VIEW_PROTO ||
-  name in ROOT_METHODS ||
-  name in SCOPE_METHODS ||
-  (RESERVED as readonly string[]).includes(name)
-
-class Kernel {
+/**
+ * One app: its plugins, lifecycle, events, hooks and frame loop. Plugins start in dependency
+ * order, each under its own owner, and stop in reverse order.
+ */
+export class Kernel {
   readonly name: string
-  readonly state = signal<AppState>('idle')
+  readonly state: Signal<AppState> = signal<AppState>('idle')
   readonly events: EventBus
   readonly hooks: HookBus
   readonly loop: LoopImpl
   readonly root: Owner
   readonly rootView: View
-  readonly #errorLog: Logger
+  readonly #options: AppOptions
   readonly #config: Config
-  readonly #timeout: number
-  /** Service getters, shared by every view of this app. */
-  readonly #proto: object
+  readonly #errorLog: Logger
+  /** Seconds. */
+  readonly #setupTimeout: number
+  /** Prototype of every view: the App API plus a getter per running service. */
+  readonly #viewProto: object
   readonly #scopeProto: object
   readonly #records = new Map<string, PluginRecord>()
-  readonly #orphans = new Set<Promise<unknown>>()
+  /** Setups that lost their race and still run. `destroy` waits for them. */
+  readonly #orphanSetups = new Set<Promise<unknown>>()
+  /** Cleanups of a failed start, awaited by `destroy`. */
+  readonly #rollbacks: Promise<unknown>[] = []
   #starting: Promise<unknown> | undefined
   #stopping: Promise<void> | undefined
-  #queue: Promise<unknown> = resolved
-  #abort = new AbortController()
-  #inSetup = false
+  /** Tail of the `use`/`remove` queue. */
+  #operations: Promise<unknown> = resolved
+  /** Aborts on `destroy`. */
+  #abortController = new AbortController()
+  /** A setup function is running synchronously right now. */
+  #inSyncSetup = false
   #reporting = false
-  #ordinal = 0
-  readonly #rollback: Promise<unknown>[] = []
-  readonly #options: AppOptions
+  #nextOrdinal = 0
 
   constructor(options: AppOptions, defaults: readonly AnyPlugin[]) {
     this.#options = options
@@ -227,7 +98,8 @@ class Kernel {
     const level = options.logLevel ?? 'warn'
     this.#errorLog = createLogger(sink, level, '')
     const timeout = options.setupTimeout
-    this.#timeout = typeof timeout === 'number' && timeout > 0 ? timeout : 30
+    this.#setupTimeout =
+      typeof timeout === 'number' && timeout > 0 ? timeout : DEFAULT_SETUP_TIMEOUT
     const depth: Depth = { value: 0 }
     const report = this.report.bind(this)
     this.events = new EventBus(report, depth)
@@ -238,47 +110,41 @@ class Kernel {
       return createLogger(sink, level, `[${parts.join(':')}]`)
     }
     this.root = new Owner({ env: { report, logFor }, label: 'app', rank: Number.POSITIVE_INFINITY })
-    this.loop = new LoopImpl(options.loop, report, (m) => this.root.log.warn(m))
-    this.#proto = Object.create(VIEW_PROTO, { [KERNEL]: { value: this } })
-    this.#scopeProto = Object.create(this.#proto, describe(SCOPE_METHODS))
-    this.rootView = Object.create(Object.create(this.#proto, describe(ROOT_METHODS)), {
+    this.loop = new LoopImpl(options.loop, report, (message) => this.root.log.warn(message))
+    this.#viewProto = Object.create(VIEW_PROTO, { [KERNEL]: { value: this } })
+    this.#scopeProto = Object.create(this.#viewProto, describe(SCOPE_METHODS))
+    this.rootView = Object.create(Object.create(this.#viewProto, describe(ROOT_METHODS)), {
       [OWNER]: { value: this.root },
     })
   }
 
   view(owner: Owner, scope: boolean): View {
-    return Object.create(scope ? this.#scopeProto : this.#proto, { [OWNER]: { value: owner } })
+    return Object.create(scope ? this.#scopeProto : this.#viewProto, { [OWNER]: { value: owner } })
   }
 
   report(error: unknown, source: ErrorSource, owner: Owner | undefined, target?: string): void {
-    const err = toDioramaError(error, source, owner?.plugin)
+    const wrapped = toDioramaError(error, source, owner?.plugin)
     // A failure inside an app:error listener or onError must not recurse.
     if (this.#reporting) {
-      console.error(err)
+      console.error(wrapped)
       return
     }
     this.#reporting = true
     try {
-      this.#errorLog.error(err)
+      this.#errorLog.error(wrapped)
       const report: ErrorReport = {
-        error: err,
+        error: wrapped,
         source,
-        plugin: owner?.plugin ?? err.plugin,
+        plugin: owner?.plugin ?? wrapped.plugin,
         target,
       }
       this.events.emit('app:error', report)
       this.#options.onError?.(report)
-    } catch (e) {
-      console.error(e)
+    } catch (failure) {
+      console.error(failure)
     } finally {
       this.#reporting = false
     }
-  }
-
-  #setStatus(rec: PluginRecord, status: PluginStatus, error?: DioramaError): void {
-    const previous = rec.status
-    rec.status = status
-    this.events.emit('plugin:status', { name: rec.name, status, previous, error })
   }
 
   has(ref: DependencyRef): boolean {
@@ -293,19 +159,19 @@ class Kernel {
         plugin: owner.plugin,
       })
     }
-    const rec = this.#records.get(name)
-    if (!owner.disposed && rec?.status === 'running') return rec.service
+    const record = this.#records.get(name)
+    if (!owner.disposed && record?.status === 'running') return record.service
     if (!required) return undefined
-    throw new DioramaError('SERVICE_UNAVAILABLE', this.#whyUnavailable(name, rec, owner), {
+    throw new DioramaError('SERVICE_UNAVAILABLE', this.#whyUnavailable(name, record, owner), {
       plugin: owner.plugin,
     })
   }
 
-  #whyUnavailable(name: string, rec: PluginRecord | undefined, owner: Owner): string {
+  #whyUnavailable(name: string, record: PluginRecord | undefined, owner: Owner): string {
     if (this.state.peek() === 'destroyed') return `"${name}": the app is destroyed`
     if (owner.disposed) return `"${name}": this view is closed`
-    if (rec) return `"${name}" is ${rec.status}${rec.error ? `: ${rec.error.message}` : ''}`
-    return `"${name}" is not installed${missingHint(this.#config, name)}`
+    if (!record) return `"${name}" is not installed${missingHint(this.#config, name)}`
+    return `"${name}" is ${record.status}${record.error ? `: ${record.error.message}` : ''}`
   }
 
   start(): Promise<unknown> {
@@ -313,7 +179,7 @@ class Kernel {
     if (this.#stopping) return Promise.reject(destroyed())
     // The queue must exist before #run flips the state: effects on `state` may call use().
     let release: () => void = noop
-    this.#queue = new Promise<void>((resolve) => {
+    this.#operations = new Promise<void>((resolve) => {
       release = resolve
     })
     this.#starting = this.#run()
@@ -323,71 +189,33 @@ class Kernel {
 
   async #run(): Promise<unknown> {
     this.state.value = 'starting'
-    const { signal } = this.#abort
+    const { signal } = this.#abortController
     try {
       const problems: DioramaError[] = []
-      const { list, failures } = await resolveEntries(
-        this.#config,
-        collectEntries(this.#config, problems),
-      )
+      const entries = collectEntries(this.#config, problems)
+      const { list, failures } = await resolveEntries(this.#config, entries)
       if (signal.aborted) throw aborted()
-
-      const ordered = orderPlugins(list)
-      if (!Array.isArray(ordered)) problems.push(cycleError(ordered.cycle))
-      // Configuration errors only cost the plugin unless it is critical or failFast is set.
-      for (const [rec, error] of failures) {
-        if (rec.critical || this.#options.failFast) problems.push(error)
-      }
-      if (problems.length || !Array.isArray(ordered)) {
-        const error =
-          problems.length === 1
-            ? (problems[0] as DioramaError)
-            : new DioramaError('CONFIG_INVALID', `${problems.length} configuration problems`, {
-                problems,
-              })
-        this.report(error, 'config', undefined)
-        return this.#fail(error)
-      }
-
-      for (const rec of ordered) {
-        rec.ordinal = this.#ordinal++
-        this.#records.set(rec.name, rec)
-      }
-      for (const [rec, error] of failures) {
-        rec.error = error
-        this.#setStatus(rec, 'failed', error)
-        this.report(error, 'config', undefined)
-      }
-
-      for (const rec of ordered) {
+      const ordered = this.#register(list, failures, problems)
+      for (const record of ordered) {
         if (signal.aborted) throw aborted()
-        if (rec.status === 'failed') continue
-        const dead = rec.deps.find((d) => !this.has(d))
-        let error: DioramaError | undefined
-        if (dead !== undefined) {
-          // The root cause is already reported, so only log and emit status.
-          error = new DioramaError(
-            'PLUGIN_DEPENDENCY_FAILED',
-            `dependency "${dead}" is not running`,
-            {
-              plugin: rec.name,
-            },
-          )
-          rec.error = error
-          this.root.log.warn(error.message)
-          this.#setStatus(rec, 'skipped', error)
-        } else error = await this.#startPlugin(rec, signal)
-        if (error && (rec.critical || (this.#options.failFast && dead === undefined))) {
+        if (record.status === 'failed') continue
+        const stopped = record.deps.find((name) => !this.has(name))
+        const error =
+          stopped === undefined
+            ? await this.#startPlugin(record, signal)
+            : this.#skip(record, stopped)
+        // failFast ends the start on a plugin's own failure, not on a skipped dependent.
+        if (error && (record.critical || (this.#options.failFast && stopped === undefined))) {
           return this.#fail(error)
         }
       }
       if (signal.aborted) throw aborted()
-    } catch (e) {
-      if (signal.aborted || this.state.peek() !== 'starting') throw e
+    } catch (error) {
+      if (signal.aborted || this.state.peek() !== 'starting') throw error
       // An unexpected throw must not leave the app stuck in `starting`.
-      const error = toDioramaError(e, 'config', undefined)
-      this.report(error, 'config', undefined)
-      return this.#fail(error)
+      const wrapped = toDioramaError(error, 'config', undefined)
+      this.report(wrapped, 'config', undefined)
+      return this.#fail(wrapped)
     }
 
     this.state.value = 'running'
@@ -398,10 +226,61 @@ class Kernel {
     return this.rootView
   }
 
+  /**
+   * Orders the resolved plugins and registers them. Fails the start on a fatal configuration
+   * problem; other problems only fail their plugin.
+   */
+  #register(
+    list: readonly PluginRecord[],
+    failures: ReadonlyMap<PluginRecord, DioramaError>,
+    problems: DioramaError[],
+  ): PluginRecord[] {
+    const ordered = orderPlugins(list)
+    if (!Array.isArray(ordered)) problems.push(cycleError(ordered.cycle))
+    // Configuration errors only cost the plugin unless it is critical or failFast is set.
+    for (const [record, error] of failures) {
+      if (record.critical || this.#options.failFast) problems.push(error)
+    }
+    if (problems.length || !Array.isArray(ordered)) {
+      const error =
+        problems.length === 1
+          ? (problems[0] as DioramaError)
+          : new DioramaError('CONFIG_INVALID', `${problems.length} configuration problems`, {
+              problems,
+            })
+      this.report(error, 'config', undefined)
+      return this.#fail(error)
+    }
+
+    for (const record of ordered) {
+      record.ordinal = this.#nextOrdinal++
+      this.#records.set(record.name, record)
+    }
+    for (const [record, error] of failures) {
+      record.error = error
+      this.#setStatus(record, 'failed', error)
+      this.report(error, 'config', undefined)
+    }
+    return ordered
+  }
+
+  /** Skips a plugin whose dependency is not running. The root cause is reported already. */
+  #skip(record: PluginRecord, stopped: string): DioramaError {
+    const error = new DioramaError(
+      'PLUGIN_DEPENDENCY_FAILED',
+      `dependency "${stopped}" is not running`,
+      { plugin: record.name },
+    )
+    record.error = error
+    this.root.log.warn(error.message)
+    this.#setStatus(record, 'skipped', error)
+    return error
+  }
+
   /** Rolls back a start and enters `failed`. */
   #fail(error: DioramaError): never {
-    for (const rec of this.#live()) this.#rollback.push(this.#stopPlugin(rec))
-    this.#rollback.push(this.root.dispose())
+    for (const record of this.#live()) this.#rollbacks.push(this.#stopPlugin(record))
+    this.#rollbacks.push(this.root.dispose())
     this.loop.stop()
     this.state.value = 'failed'
     throw error
@@ -409,71 +288,90 @@ class Kernel {
 
   /** Plugins holding a scope, latest first. */
   #live(): PluginRecord[] {
-    return [...this.#records.values()].filter((r) => r.scope).sort((a, b) => b.ordinal - a.ordinal)
+    return [...this.#records.values()]
+      .filter((record) => record.scope)
+      .sort((a, b) => b.ordinal - a.ordinal)
+  }
+
+  #setStatus(record: PluginRecord, status: PluginStatus, error?: DioramaError): void {
+    const previous = record.status
+    record.status = status
+    this.events.emit('plugin:status', { name: record.name, status, previous, error })
   }
 
   /** Runs one setup and returns its failure. ABORTED is thrown to the caller. */
-  async #startPlugin(rec: PluginRecord, signal: AbortSignal): Promise<DioramaError | undefined> {
+  async #startPlugin(record: PluginRecord, signal: AbortSignal): Promise<DioramaError | undefined> {
     const scope = this.root.child({
-      label: rec.name,
-      rank: rec.ordinal,
-      plugin: rec.name,
-      allowed: new Set([rec.name, ...rec.deps, ...rec.optional]),
+      label: record.name,
+      rank: record.ordinal,
+      plugin: record.name,
+      allowed: new Set([record.name, ...record.deps, ...record.optional]),
     })
     scope.ready = false
-    rec.scope = scope
-    rec.error = undefined
-    this.#setStatus(rec, 'starting')
+    record.scope = scope
+    record.error = undefined
+    this.#setStatus(record, 'starting')
     let service: unknown
     try {
       let result: unknown
-      this.#inSetup = true
+      this.#inSyncSetup = true
       try {
-        result = rec.def.setup(this.view(scope, false), rec.options)
+        result = record.def.setup(this.view(scope, false), record.options)
       } finally {
-        this.#inSetup = false
+        this.#inSyncSetup = false
       }
-      service = isThenable(result) ? await this.#race(result, rec.name, signal, scope) : result
-      if (scope.disposed) throw aborted(rec.name)
-      // A required dependency may have stopped while this setup was awaiting.
-      const dead = rec.deps.find((d) => !this.has(d))
-      if (dead !== undefined) {
+      service = isThenable(result) ? await this.#race(result, record.name, signal, scope) : result
+      // The scope may have closed, or a required dependency stopped, while setup was awaiting.
+      if (scope.disposed) throw aborted(record.name)
+      const stopped = record.deps.find((name) => !this.has(name))
+      if (stopped !== undefined) {
         throw new DioramaError(
           'PLUGIN_DEPENDENCY_FAILED',
-          `dependency "${dead}" stopped during setup`,
-          {
-            plugin: rec.name,
-          },
+          `dependency "${stopped}" stopped during setup`,
+          { plugin: record.name },
         )
       }
-    } catch (e) {
-      scope.abortOnAdd = true
-      void scope.dispose()
-      if (rec.scope === scope) rec.scope = undefined
-      if (isDioramaError(e, 'ABORTED') && (signal.aborted || rec.status !== 'starting')) throw e
-      const error =
-        isDioramaError(e, 'PLUGIN_TIMEOUT') || isDioramaError(e, 'PLUGIN_DEPENDENCY_FAILED')
-          ? e
-          : new DioramaError('PLUGIN_SETUP', messageOf(e), { plugin: rec.name, cause: e })
-      rec.error = error
-      this.#setStatus(rec, 'failed', error)
-      this.report(error, 'setup', scope)
-      return error
+    } catch (error) {
+      return this.#setupFailed(record, scope, signal, error)
     }
-    rec.service = service
-    rec.hasService = service !== undefined
+    // Running from here on: expose the service as `app.<name>` on every view.
+    record.service = service
+    record.hasService = service !== undefined
     scope.ready = true
-    if (rec.hasService) {
+    if (record.hasService) {
       const kernel = this
-      Object.defineProperty(this.#proto, rec.name, {
+      Object.defineProperty(this.#viewProto, record.name, {
         configurable: true,
         get(this: View) {
-          return kernel.service(this[OWNER], rec.name, false)
+          return kernel.service(this[OWNER], record.name, false)
         },
       })
     }
-    this.#setStatus(rec, 'running')
+    this.#setStatus(record, 'running')
     return undefined
+  }
+
+  /** Undoes a failed setup and returns its error. Rethrows ABORTED of a cancelled start. */
+  #setupFailed(
+    record: PluginRecord,
+    scope: Owner,
+    signal: AbortSignal,
+    error: unknown,
+  ): DioramaError {
+    scope.abortOnAdd = true
+    void scope.dispose()
+    if (record.scope === scope) record.scope = undefined
+    if (isDioramaError(error, 'ABORTED') && (signal.aborted || record.status !== 'starting')) {
+      throw error
+    }
+    const failure =
+      isDioramaError(error, 'PLUGIN_TIMEOUT') || isDioramaError(error, 'PLUGIN_DEPENDENCY_FAILED')
+        ? error
+        : new DioramaError('PLUGIN_SETUP', messageOf(error), { plugin: record.name, cause: error })
+    record.error = failure
+    this.#setStatus(record, 'failed', failure)
+    this.report(failure, 'setup', scope)
+    return failure
   }
 
   /**
@@ -483,65 +381,65 @@ class Kernel {
   #race(
     setup: PromiseLike<unknown>,
     plugin: string,
-    app: AbortSignal,
+    appSignal: AbortSignal,
     scope: Owner,
   ): Promise<unknown> {
     const settled = Promise.resolve(setup)
     const orphan = settled.then(noop, noop)
-    this.#orphans.add(orphan)
-    void orphan.then(() => this.#orphans.delete(orphan))
+    this.#orphanSetups.add(orphan)
+    void orphan.then(() => this.#orphanSetups.delete(orphan))
     return new Promise((resolve, reject) => {
-      const signals = [app, scope.signal]
+      const signals = [appSignal, scope.signal]
       if (signals.some((s) => s.aborted)) return reject(aborted(plugin))
-      const ms = this.#timeout * 1000
+      const ms = this.#setupTimeout * 1000
       const timer =
         ms <= MAX_TIMER_MS
           ? setTimeout(() => {
-              const message = `setup did not finish in ${this.#timeout} s (awaiting use() or remove() from setup deadlocks)`
+              const message = `setup did not finish in ${this.#setupTimeout} s (awaiting use() or remove() from setup deadlocks)`
               reject(new DioramaError('PLUGIN_TIMEOUT', message, { plugin }))
             }, ms)
           : undefined
       const onAbort = (): void => reject(aborted(plugin))
       for (const s of signals) s.addEventListener('abort', onAbort, { once: true })
-      const done = (): void => {
+      const cleanup = (): void => {
         clearTimeout(timer)
         for (const s of signals) s.removeEventListener('abort', onAbort)
       }
       settled.then(
         (value) => {
-          done()
+          cleanup()
           resolve(value)
         },
         (error: unknown) => {
-          done()
+          cleanup()
           reject(error)
         },
       )
     })
   }
 
-  #stopPlugin(rec: PluginRecord): Promise<void> {
-    const { scope } = rec
+  #stopPlugin(record: PluginRecord): Promise<void> {
+    const { scope } = record
     if (!scope) return resolved
-    if (rec.status === 'starting') scope.abortOnAdd = true
-    this.#setStatus(rec, 'stopping')
-    if (rec.hasService) Reflect.deleteProperty(this.#proto, rec.name)
-    rec.hasService = false
-    rec.service = undefined
-    rec.scope = undefined
-    rec.release?.()
-    rec.release = undefined
+    if (record.status === 'starting') scope.abortOnAdd = true
+    this.#setStatus(record, 'stopping')
+    if (record.hasService) Reflect.deleteProperty(this.#viewProto, record.name)
+    record.hasService = false
+    record.service = undefined
+    record.scope = undefined
+    record.release?.()
+    record.release = undefined
     const done = scope.dispose()
-    this.#setStatus(rec, 'stopped')
+    this.#setStatus(record, 'stopped')
     return done
   }
 
   /** Stops required dependents first (latest first), then the plugin itself. */
-  #stopTree(rec: PluginRecord): Promise<unknown> {
+  #stopTree(record: PluginRecord): Promise<unknown> {
     // A stale record (replaced by a re-install) must not stop its namesake's dependents.
-    if (this.#records.get(rec.name) !== rec) return resolved
-    const dependents = this.#dependentsOf(rec.name).sort((a, b) => b.ordinal - a.ordinal)
-    return Promise.all([...dependents, rec].map((r) => this.#stopPlugin(r)))
+    if (this.#records.get(record.name) !== record) return resolved
+    const dependents = this.#dependentsOf(record.name).sort((a, b) => b.ordinal - a.ordinal)
+    return Promise.all([...dependents, record].map((r) => this.#stopPlugin(r)))
   }
 
   destroy(): Promise<void> {
@@ -551,33 +449,35 @@ class Kernel {
     this.#stopping = new Promise<void>((resolve) => {
       finish = resolve
     })
-    const prev = this.state.peek()
-    const pending: Promise<unknown>[] = [...this.#rollback]
+    const previous = this.state.peek()
+    const pending: Promise<unknown>[] = [...this.#rollbacks]
     const waiting = new Set<string>()
-    if (prev !== 'idle' && prev !== 'failed') {
+    if (previous !== 'idle' && previous !== 'failed') {
       this.state.value = 'destroying'
-      this.#abort.abort()
+      this.#abortController.abort()
       // Services are still alive for app:destroy listeners.
-      if (prev === 'running') this.events.emit('app:destroy', undefined)
+      if (previous === 'running') this.events.emit('app:destroy', undefined)
       this.loop.stop()
-      for (const rec of this.#live()) {
-        waiting.add(rec.name)
-        pending.push(this.#stopPlugin(rec).finally(() => waiting.delete(rec.name)))
+      for (const record of this.#live()) {
+        waiting.add(record.name)
+        pending.push(this.#stopPlugin(record).finally(() => waiting.delete(record.name)))
       }
     }
-    pending.push(this.root.dispose(), ...this.#orphans)
+    pending.push(this.root.dispose(), ...this.#orphanSetups)
     this.state.value = 'destroyed'
     finish(this.#settle(pending, waiting))
     return this.#stopping
   }
 
+  /** Waits for every cleanup, or warns and gives up after the setup timeout. */
   #settle(pending: Promise<unknown>[], waiting: ReadonlySet<string>): Promise<void> {
     const all = Promise.allSettled(pending).then(noop)
-    const ms = this.#timeout * 1000
+    const ms = this.#setupTimeout * 1000
     if (ms > MAX_TIMER_MS) return all
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
-        this.root.log.warn(`destroy: cleanups still pending after ${this.#timeout} s`, [...waiting])
+        const message = `destroy: cleanups still pending after ${this.#setupTimeout} s`
+        this.root.log.warn(message, [...waiting])
         resolve()
       }, ms)
       void all.then(() => {
@@ -597,21 +497,23 @@ class Kernel {
     if (state === 'idle' || state === 'failed') {
       return Promise.reject(new DioramaError('APP_STATE', `the app is ${state}`))
     }
-    if (this.#inSetup || (owner.plugin && this.#records.get(owner.plugin)?.status === 'starting')) {
+    const ownerStarting = owner.plugin && this.#records.get(owner.plugin)?.status === 'starting'
+    if (this.#inSyncSetup || ownerStarting) {
       return Promise.reject(
         new DioramaError('PLUGIN_REENTRANT', 'use() and remove() cannot be called from setup', {
           plugin: owner.plugin,
         }),
       )
     }
-    const run = this.#queue.then(() => {
+    const run = this.#operations.then(() => {
       if (this.#stopping) throw destroyed()
       if (owner.disposed) throw aborted()
-      if (this.state.peek() !== 'running')
+      if (this.state.peek() !== 'running') {
         throw new DioramaError('APP_STATE', 'the app did not start')
+      }
       return operation()
     })
-    this.#queue = run.then(noop, noop)
+    this.#operations = run.then(noop, noop)
     return run
   }
 
@@ -620,79 +522,74 @@ class Kernel {
   }
 
   async #install(entry: unknown, owner: Owner): Promise<unknown> {
-    const plugins: unknown[] = []
-    const flatten = (value: unknown): void => {
-      if (Array.isArray(value)) value.forEach(flatten)
-      else if (isPreset(value)) [...value.presets, ...value.plugins].forEach(flatten)
-      else if (value) plugins.push(value)
-    }
-    flatten(entry)
-
-    const entries = plugins.map((plugin, index): Entry => {
+    const entries = flattenPlugins(entry).map((plugin, index): Entry => {
       const def = definitionOf(plugin)
       if (!def) throw new DioramaError('PLUGIN_INVALID', `not a plugin: ${String(plugin)}`)
-      return { plugin: plugin as AnyPlugin, def, layer: 3, index }
+      return { plugin: plugin as AnyPlugin, def, layer: LAYER_RUNTIME, index }
     })
     const { list, failures } = await resolveEntries(this.#config, entries, (name) => this.has(name))
-    const cancelled = (): boolean => this.#abort.signal.aborted || owner.disposed
+    const cancelled = (): boolean => this.#abortController.signal.aborted || owner.disposed
     if (cancelled()) throw aborted()
     for (const error of failures.values()) throw error
-    // Re-installing a running plugin with the same definition and options is a no-op.
-    const fresh = list.filter((rec) => {
-      const running = this.#records.get(rec.name)
-      if (running?.status !== 'running') return true
-      if (running.def === rec.def && shallowEqual(running.raw, rec.raw)) return false
-      throw new DioramaError(
-        'PLUGIN_DUPLICATE',
-        `"${rec.name}" is already running with other options`,
-        {
-          plugin: rec.name,
-        },
-      )
-    })
-    const ordered = orderPlugins(fresh)
+    const ordered = orderPlugins(list.filter((record) => this.#needsInstall(record)))
     if (!Array.isArray(ordered)) throw cycleError(ordered.cycle)
 
     const started: PluginRecord[] = []
     try {
-      for (const rec of ordered) {
+      for (const record of ordered) {
         if (cancelled()) throw aborted()
-        rec.ordinal = this.#ordinal++
-        this.#records.set(rec.name, rec)
+        record.ordinal = this.#nextOrdinal++
+        this.#records.set(record.name, record)
         // Owned before setup, so closing the owner also interrupts a running setup.
         if (owner !== this.root) {
-          rec.release = owner.add(() => (rec.scope ? this.#stopTree(rec) : undefined))
+          record.release = owner.add(() => (record.scope ? this.#stopTree(record) : undefined))
         }
-        const error = await this.#startPlugin(rec, this.#abort.signal)
+        const error = await this.#startPlugin(record, this.#abortController.signal)
         if (error) throw error
-        started.push(rec)
+        started.push(record)
       }
     } catch (error) {
-      for (const r of started.reverse()) await this.#stopPlugin(r)
+      for (const record of started.reverse()) await this.#stopPlugin(record)
       // Drop owner links of records that never ran, or a later close could hit a namesake.
-      for (const r of ordered) {
-        r.release?.()
-        r.release = undefined
+      for (const record of ordered) {
+        record.release?.()
+        record.release = undefined
       }
       throw error
     }
     return typeof entry === 'function' ? this.#records.get(entry.name)?.service : undefined
   }
 
+  /**
+   * Whether `use` must start this record. Re-installing a running plugin with the same
+   * definition and options is a no-op.
+   * @throws {DioramaError} `PLUGIN_DUPLICATE` when it runs with other options.
+   */
+  #needsInstall(record: PluginRecord): boolean {
+    const running = this.#records.get(record.name)
+    if (running?.status !== 'running') return true
+    if (running.def === record.def && shallowEqual(running.raw, record.raw)) return false
+    throw new DioramaError(
+      'PLUGIN_DUPLICATE',
+      `"${record.name}" is already running with other options`,
+      { plugin: record.name },
+    )
+  }
+
   remove(ref: DependencyRef, options: RemoveOptions | undefined, owner: Owner): Promise<boolean> {
     return this.#enqueue(owner, async () => {
       const name = refName(ref) ?? ''
-      const rec = this.#records.get(name)
-      if (!rec) return false
-      if (rec.status === 'running') {
+      const record = this.#records.get(name)
+      if (!record) return false
+      if (record.status === 'running') {
         const dependents = this.#dependentsOf(name)
         if (dependents.length && !options?.cascade) {
-          const names = dependents.map((d) => d.name).join(', ')
+          const names = dependents.map((dependent) => dependent.name).join(', ')
           throw new DioramaError('PLUGIN_HAS_DEPENDENTS', `required by ${names}`, { plugin: name })
         }
-        await this.#stopTree(rec)
+        await this.#stopTree(record)
       }
-      rec.release?.()
+      record.release?.()
       this.#records.delete(name)
       return true
     })
@@ -702,10 +599,10 @@ class Kernel {
   #dependentsOf(name: string): PluginRecord[] {
     const found = new Set<PluginRecord>()
     const visit = (target: string): void => {
-      for (const rec of this.#records.values()) {
-        if (rec.status === 'running' && rec.deps.includes(target) && !found.has(rec)) {
-          found.add(rec)
-          visit(rec.name)
+      for (const record of this.#records.values()) {
+        if (record.status === 'running' && record.deps.includes(target) && !found.has(record)) {
+          found.add(record)
+          visit(record.name)
         }
       }
     }
@@ -720,4 +617,16 @@ export function createKernelApp(
   defaults: readonly AnyPlugin[],
 ): unknown {
   return new Kernel(options ?? {}, defaults).rootView
+}
+
+/** Plugins of a `use()` argument: arrays and presets are opened, falsy entries skipped. */
+function flattenPlugins(entry: unknown): unknown[] {
+  const plugins: unknown[] = []
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) value.forEach(visit)
+    else if (isPreset(value)) [...value.presets, ...value.plugins].forEach(visit)
+    else if (value) plugins.push(value)
+  }
+  visit(entry)
+  return plugins
 }

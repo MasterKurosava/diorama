@@ -1,30 +1,37 @@
-// Push-pull signals. A write marks dependents as maybe stale and reads pull fresh values
-// lazily. Every source has a version, so staleness is checked, never guessed.
+/**
+ * Push-pull signals. A write marks dependents as maybe stale and reads pull fresh values
+ * lazily. Every source has a version, so staleness is checked, never guessed.
+ * @module
+ */
 import { DioramaError } from './errors'
 import type { EffectFn, Off, ReadonlySignal, Signal, SignalOptions } from './types'
 import { isThenable } from './util'
 
+/** A computed or an effect: something that reads sources. */
 interface Observer {
+  /** Sources read by the last run, with the version each had then. */
   deps: Map<Source, number>
   notify(): void
 }
 
+/** A signal or a computed: something that can be read. */
 interface Source {
   version: number
+  /** Brings the value up to date. Only computeds do work here. */
   refresh(): void
   watch(observer: Observer): void
   unwatch(observer: Observer): void
 }
 
-// Module state is empty between synchronous calls. `current` collects the running
-// observer's dependencies.
-let current: Map<Source, number> | undefined
+/** Effects that write signals they read can loop. Give up after this many flush passes. */
+const MAX_PASSES = 100
+
+// Module state is empty between synchronous calls.
+/** Dependencies of the observer running now, filled by reads. */
+let collecting: Map<Source, number> | undefined
 let batchDepth = 0
 let flushing = false
 const queue: EffectNode[] = []
-
-/** Effects that write signals they read can loop. Give up after this many flush passes. */
-const MAX_PASSES = 100
 
 /** Reports errors that must not propagate to the code that wrote the signal. */
 function reportGlobal(error: unknown): void {
@@ -34,9 +41,10 @@ function reportGlobal(error: unknown): void {
 }
 
 function track(source: Source): void {
-  if (current && !current.has(source)) current.set(source, source.version)
+  if (collecting && !collecting.has(source)) collecting.set(source, source.version)
 }
 
+/** Runs queued effects until none are left, outside batches and nested flushes. */
 function flush(): void {
   if (flushing || batchDepth > 0) return
   flushing = true
@@ -44,16 +52,16 @@ function flush(): void {
     let passes = 0
     while (queue.length) {
       if (++passes > MAX_PASSES) {
-        for (const e of queue) e.queued = false
+        for (const node of queue) node.queued = false
         queue.length = 0
         const message = `effects did not settle after ${MAX_PASSES} passes`
         reportGlobal(new DioramaError('SIGNAL_CYCLE', message))
         break
       }
       const pass = queue.splice(0)
-      for (const e of pass) {
-        e.queued = false
-        if (e.stale()) e.run()
+      for (const node of pass) {
+        node.queued = false
+        if (node.stale()) node.run()
       }
     }
   } finally {
@@ -71,32 +79,33 @@ function relink(observer: Observer, next: Map<Source, number>, watched: boolean)
   observer.deps = next
 }
 
+/** A writable source. */
 class SignalNode<T> implements Signal<T>, Source {
   version = 0
   #targets = new Set<Observer>()
-  #current: T
+  #value: T
   readonly #equals: (a: T, b: T) => boolean
 
   constructor(value: T, options?: SignalOptions<T>) {
-    this.#current = value
+    this.#value = value
     this.#equals = options?.equals ?? Object.is
   }
 
   get value(): T {
     track(this)
-    return this.#current
+    return this.#value
   }
 
   set value(next: T) {
-    if (this.#equals(this.#current, next)) return
-    this.#current = next
+    if (this.#equals(this.#value, next)) return
+    this.#value = next
     this.version++
-    for (const t of this.#targets) t.notify()
+    for (const target of this.#targets) target.notify()
     flush()
   }
 
   peek(): T {
-    return this.#current
+    return this.#value
   }
 
   subscribe(listener: (value: T) => void): Off {
@@ -114,11 +123,12 @@ class SignalNode<T> implements Signal<T>, Source {
   }
 }
 
+/** A derived value: a source for its readers and an observer of what it reads. */
 class ComputedNode<T> implements ReadonlySignal<T>, Source, Observer {
   version = 0
   deps: Map<Source, number> = new Map()
   #targets = new Set<Observer>()
-  #current: T | undefined
+  #value: T | undefined
   #error: unknown
   #failed = false
   #initialized = false
@@ -136,13 +146,13 @@ class ComputedNode<T> implements ReadonlySignal<T>, Source, Observer {
     this.refresh()
     track(this)
     if (this.#failed) throw this.#error
-    return this.#current as T
+    return this.#value as T
   }
 
   peek(): T {
     this.refresh()
     if (this.#failed) throw this.#error
-    return this.#current as T
+    return this.#value as T
   }
 
   subscribe(listener: (value: T) => void): Off {
@@ -152,7 +162,7 @@ class ComputedNode<T> implements ReadonlySignal<T>, Source, Observer {
   notify(): void {
     if (this.#dirty) return
     this.#dirty = true
-    for (const t of this.#targets) t.notify()
+    for (const target of this.#targets) target.notify()
   }
 
   refresh(): void {
@@ -176,31 +186,31 @@ class ComputedNode<T> implements ReadonlySignal<T>, Source, Observer {
   }
 
   #recompute(): void {
-    const prev = current
+    const outer = collecting
     const next = new Map<Source, number>()
-    current = next
+    collecting = next
     this.#running = true
     let value: T | undefined
     let error: unknown
     let failed = false
     try {
       value = this.#fn()
-    } catch (e) {
-      error = e
+    } catch (thrown) {
+      error = thrown
       failed = true
     } finally {
-      current = prev
+      collecting = outer
       this.#running = false
     }
     relink(this, next, this.#targets.size > 0)
     const changed =
       !this.#initialized ||
       failed !== this.#failed ||
-      (failed ? error !== this.#error : !this.#equals(this.#current as T, value as T))
+      (failed ? error !== this.#error : !this.#equals(this.#value as T, value as T))
     this.#initialized = true
     this.#dirty = false
     if (changed) {
-      this.#current = value
+      this.#value = value
       this.#error = error
       this.#failed = failed
       this.version++
@@ -225,6 +235,7 @@ class ComputedNode<T> implements ReadonlySignal<T>, Source, Observer {
   }
 }
 
+/** Reruns its function when a source it read changes. */
 class EffectNode implements Observer {
   deps: Map<Source, number> = new Map()
   queued = false
@@ -262,17 +273,17 @@ class EffectNode implements Observer {
   run(): void {
     if (this.#disposed) return
     this.#runCleanup()
-    const prev = current
+    const outer = collecting
     const next = new Map<Source, number>()
-    current = next
+    collecting = next
     try {
       const result = this.#fn()
       if (typeof result === 'function') this.#cleanup = result as () => unknown
       else if (isThenable(result)) result.then(undefined, this.#onError)
-    } catch (e) {
-      this.#onError(e)
+    } catch (error) {
+      this.#onError(error)
     } finally {
-      current = prev
+      collecting = outer
       if (this.#disposed) this.#runCleanup()
       else this.#settle(next)
     }
@@ -303,21 +314,22 @@ class EffectNode implements Observer {
     const cleanup = this.#cleanup
     this.#cleanup = undefined
     if (!cleanup) return
-    const prev = current
-    current = undefined
+    const outer = collecting
+    collecting = undefined
     try {
       cleanup()
-    } catch (e) {
-      this.#onError(e)
+    } catch (error) {
+      this.#onError(error)
     } finally {
-      current = prev
+      collecting = outer
     }
   }
 }
 
+/** Svelte store contract: calls `listener` now and after every change. The first call may throw. */
 function subscribe<T>(node: ReadonlySignal<T>, listener: (value: T) => void): Off {
   let first = true
-  const e = new EffectNode(
+  const watcher = new EffectNode(
     () => {
       const value = node.value
       untracked(() => listener(value))
@@ -328,35 +340,42 @@ function subscribe<T>(node: ReadonlySignal<T>, listener: (value: T) => void): Of
     },
   )
   try {
-    e.run()
+    watcher.run()
   } catch (error) {
-    e.dispose()
+    watcher.dispose()
     throw error
   } finally {
     first = false
   }
-  return () => e.dispose()
+  return () => watcher.dispose()
 }
 
+/** A writable reactive value. Reading `value` inside `effect` or `computed` tracks it. */
 export function signal<T>(value: T, options?: SignalOptions<T>): Signal<T> {
   return new SignalNode(value, options)
 }
 
+/**
+ * A read-only value derived from signals, recomputed lazily when they change.
+ * @throws {DioramaError} `SIGNAL_CYCLE` on read when the value depends on itself.
+ */
 export function computed<T>(compute: () => T, options?: SignalOptions<T>): ReadonlySignal<T> {
   return new ComputedNode(compute, options)
 }
 
 /** `effect` with a custom error sink. `app.effect` reports through the app. */
 export function ownedEffect(fn: EffectFn, onError: (error: unknown) => void): Off {
-  const e = new EffectNode(fn, onError)
-  e.run()
-  return () => e.dispose()
+  const node = new EffectNode(fn, onError)
+  node.run()
+  return () => node.dispose()
 }
 
+/** Runs `fn` now and again whenever a signal it read changes. Returns Off. */
 export function effect(fn: EffectFn): Off {
   return ownedEffect(fn, reportGlobal)
 }
 
+/** Runs `fn` and notifies effects once at the end, not after each write. */
 export function batch<T>(fn: () => T): T {
   batchDepth++
   try {
@@ -367,12 +386,13 @@ export function batch<T>(fn: () => T): T {
   }
 }
 
+/** Runs `fn` without tracking the signals it reads. */
 export function untracked<T>(fn: () => T): T {
-  const prev = current
-  current = undefined
+  const outer = collecting
+  collecting = undefined
   try {
     return fn()
   } finally {
-    current = prev
+    collecting = outer
   }
 }

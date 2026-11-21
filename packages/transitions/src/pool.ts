@@ -1,5 +1,5 @@
-import type { Copy } from '@diorama/effects'
-import { hold, poseOf } from './flight'
+import type { Copy } from '@dioramajs/effects'
+import { hold, poseOf } from './geometry'
 
 /**
  * Unpaired keyed ghosts wait here, invisible, for `grace` seconds in case a late partner shows up

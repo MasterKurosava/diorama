@@ -172,15 +172,81 @@ importers:
 
   packages/assets:
     devDependencies:
-      '@diorama/core':
+      '@dioramajs/core':
         specifier: workspace:*
         version: link:../core
-      '@diorama/render':
+      '@dioramajs/render':
         specifier: workspace:*
         version: link:../render
       '@types/node':
         specifier: 26.6.6
         version: 26.6.6
+      '@types/three':
+        specifier: ^0.187.0
+        version: 0.187.0
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
+      tsdown:
+        specifier: 0.23.4
+        version: 0.23.4(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/audio:
+    devDependencies:
+      '@dioramajs/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
+      '@types/three':
+        specifier: ^0.187.0
+        version: 0.187.0
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
+      tsdown:
+        specifier: 0.23.4
+        version: 0.23.4(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/backgrounds:
+    devDependencies:
+      '@dioramajs/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
+      '@types/three':
+        specifier: ^0.187.0
+        version: 0.187.0
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
+      tsdown:
+        specifier: 0.23.4
+        version: 0.23.4(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/blocks:
+    devDependencies:
+      '@dioramajs/core':
+        specifier: workspace:*
+        version: link:../core
+      '@dioramajs/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
       '@types/three':
         specifier: ^0.187.0
         version: 0.187.0
@@ -203,30 +269,87 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  packages/data:
+    devDependencies:
+      '@dioramajs/core':
+        specifier: workspace:*
+        version: link:../core
+      '@dioramajs/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@dioramajs/globe':
+        specifier: workspace:*
+        version: link:../globe
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
+      '@types/three':
+        specifier: ^0.187.0
+        version: 0.187.0
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
+      tsdown:
+        specifier: 0.23.4
+        version: 0.23.4(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
   packages/diorama:
     dependencies:
-      '@diorama/assets':
+      '@dioramajs/assets':
         specifier: workspace:^
         version: link:../assets
-      '@diorama/core':
+      '@dioramajs/audio':
+        specifier: workspace:^
+        version: link:../audio
+      '@dioramajs/backgrounds':
+        specifier: workspace:^
+        version: link:../backgrounds
+      '@dioramajs/blocks':
+        specifier: workspace:^
+        version: link:../blocks
+      '@dioramajs/core':
         specifier: workspace:^
         version: link:../core
-      '@diorama/effects':
+      '@dioramajs/data':
+        specifier: workspace:^
+        version: link:../data
+      '@dioramajs/effects':
         specifier: workspace:^
         version: link:../effects
-      '@diorama/gsap':
+      '@dioramajs/globe':
+        specifier: workspace:^
+        version: link:../globe
+      '@dioramajs/glsl':
+        specifier: workspace:^
+        version: link:../glsl
+      '@dioramajs/gsap':
         specifier: workspace:^
         version: link:../gsap
-      '@diorama/lenis':
+      '@dioramajs/lenis':
         specifier: workspace:^
         version: link:../lenis
-      '@diorama/media':
+      '@dioramajs/media':
         specifier: workspace:^
         version: link:../media
-      '@diorama/render':
+      '@dioramajs/model':
+        specifier: workspace:^
+        version: link:../model
+      '@dioramajs/particles':
+        specifier: workspace:^
+        version: link:../particles
+      '@dioramajs/quality':
+        specifier: workspace:^
+        version: link:../quality
+      '@dioramajs/render':
         specifier: workspace:^
         version: link:../render
-      '@diorama/transitions':
+      '@dioramajs/text':
+        specifier: workspace:^
+        version: link:../text
+      '@dioramajs/transitions':
         specifier: workspace:^
         version: link:../transitions
     devDependencies:
@@ -251,10 +374,31 @@ importers:
 
   packages/effects:
     devDependencies:
-      '@diorama/core':
+      '@dioramajs/core':
         specifier: workspace:*
         version: link:../core
-      '@diorama/render':
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
+      '@types/three':
+        specifier: ^0.187.0
+        version: 0.187.0
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
+      tsdown:
+        specifier: 0.23.4
+        version: 0.23.4(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/globe:
+    devDependencies:
+      '@dioramajs/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@dioramajs/render':
         specifier: workspace:*
         version: link:../render
       '@types/three':
@@ -272,10 +416,10 @@ importers:
 
   packages/glsl:
     devDependencies:
-      '@diorama/core':
+      '@dioramajs/core':
         specifier: workspace:*
         version: link:../core
-      '@diorama/effects':
+      '@dioramajs/effects':
         specifier: workspace:*
         version: link:../effects
       '@types/node':
@@ -299,7 +443,7 @@ importers:
 
   packages/gsap:
     devDependencies:
-      '@diorama/core':
+      '@dioramajs/core':
         specifier: workspace:*
         version: link:../core
       gsap:
@@ -314,7 +458,7 @@ importers:
 
   packages/lenis:
     devDependencies:
-      '@diorama/core':
+      '@dioramajs/core':
         specifier: workspace:*
         version: link:../core
       lenis:
@@ -329,9 +473,81 @@ importers:
 
   packages/media:
     devDependencies:
-      '@diorama/effects':
+      '@dioramajs/core':
+        specifier: workspace:*
+        version: link:../core
+      '@dioramajs/effects':
         specifier: workspace:*
         version: link:../effects
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
+      '@types/three':
+        specifier: ^0.187.0
+        version: 0.187.0
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
+      tsdown:
+        specifier: 0.23.4
+        version: 0.23.4(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/model:
+    devDependencies:
+      '@dioramajs/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
+      '@types/three':
+        specifier: ^0.187.0
+        version: 0.187.0
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
+      tsdown:
+        specifier: 0.23.4
+        version: 0.23.4(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/particles:
+    devDependencies:
+      '@dioramajs/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
+      '@types/three':
+        specifier: ^0.187.0
+        version: 0.187.0
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
+      tsdown:
+        specifier: 0.23.4
+        version: 0.23.4(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
+  packages/quality:
+    devDependencies:
+      '@dioramajs/core':
+        specifier: workspace:*
+        version: link:../core
+      '@dioramajs/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
       '@types/three':
         specifier: ^0.187.0
         version: 0.187.0
@@ -347,7 +563,7 @@ importers:
 
   packages/render:
     devDependencies:
-      '@diorama/core':
+      '@dioramajs/core':
         specifier: workspace:*
         version: link:../core
       '@types/three':
@@ -363,12 +579,33 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  packages/text:
+    devDependencies:
+      '@dioramajs/effects':
+        specifier: workspace:*
+        version: link:../effects
+      '@dioramajs/render':
+        specifier: workspace:*
+        version: link:../render
+      '@types/three':
+        specifier: ^0.187.0
+        version: 0.187.0
+      three:
+        specifier: ^0.187.0
+        version: 0.187.0
+      tsdown:
+        specifier: 0.23.4
+        version: 0.23.4(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
   packages/transitions:
     devDependencies:
-      '@diorama/core':
+      '@dioramajs/core':
         specifier: workspace:*
         version: link:../core
-      '@diorama/effects':
+      '@dioramajs/effects':
         specifier: workspace:*
         version: link:../effects
       '@types/node':

@@ -1,17 +1,36 @@
 {
-  "name": "@diorama/assets",
-  "version": "0.0.0",
+  "name": "@dioramajs/assets",
+  "version": "0.1.0",
+  "description": "Asset loading for Diorama: cache, preload and progress; glTF with Draco, Meshopt and KTX2.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl",
+    "loader",
+    "gltf",
+    "ktx2"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/assets"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
-      "@diorama/source": "./src/index.ts",
+      "@dioramajs/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
     "./three": {
-      "@diorama/source": "./src/three/index.ts",
+      "@dioramajs/source": "./src/three/index.ts",
       "types": "./dist/three/index.d.ts",
       "default": "./dist/three/index.js"
     },
@@ -26,22 +45,25 @@
     "typecheck": "tsc"
   },
   "peerDependencies": {
-    "@diorama/core": "workspace:^",
-    "@diorama/render": "workspace:^",
+    "@dioramajs/core": "workspace:^",
+    "@dioramajs/render": "workspace:^",
     "three": "^0.187.0"
   },
   "peerDependenciesMeta": {
-    "@diorama/render": {
+    "@dioramajs/render": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@diorama/core": "workspace:*",
-    "@diorama/render": "workspace:*",
+    "@dioramajs/core": "workspace:*",
+    "@dioramajs/render": "workspace:*",
     "@types/node": "26.6.6",
     "@types/three": "^0.187.0",
     "three": "^0.187.0",
     "tsdown": "0.23.4",
     "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

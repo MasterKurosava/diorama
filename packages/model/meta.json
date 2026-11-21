@@ -1,0 +1,1490 @@
+[
+  {
+    "name": "model",
+    "module": "model",
+    "package": "@dioramajs/model",
+    "import": "@dioramajs/model/model",
+    "builtIn": true,
+    "source": "packages/model/src/model.ts",
+    "category": "3d",
+    "summary": "A glTF model fitted into the element, lit, turnable and recolored from markup.",
+    "looks": "The model from `src` sits centered in the box, lit by a soft studio environment and tone mapped like a product shot, facing the viewer or resting in a three-quarter view seen slightly from above. From that pose it can turn on its own, follow scroll, lean toward the pointer and spin under a drag with a little inertia, staying where the visitor leaves it. A part of it takes the color picked in a group of swatches, blending smoothly to the new one.",
+    "target": "any element; put a poster <img> inside, it shows without WebGL and until the model is ready",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "src",
+        "attribute": "data-dio-src",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "URL of the GLB or glTF file."
+      },
+      {
+        "name": "part",
+        "attribute": "data-dio-part",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Material or mesh names to recolor, comma separated; empty keeps the file's colors."
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#ffffff",
+        "live": true,
+        "preload": true,
+        "description": "Color of the part, any CSS color."
+      },
+      {
+        "name": "swatches",
+        "attribute": "data-dio-swatches",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Selector of a radio group or <select> whose pick recolors the part, as `color` does."
+      },
+      {
+        "name": "duration",
+        "attribute": "data-dio-duration",
+        "type": "number",
+        "default": 0.4,
+        "live": true,
+        "preload": true,
+        "description": "Time a color or rest pose change takes.",
+        "range": [0, 2],
+        "unit": "s"
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 0.9,
+        "live": true,
+        "preload": true,
+        "description": "Size in the box: 1 fits the model as it is seen in its rest pose, its near side larger in perspective, centered on what is drawn.",
+        "range": [0.1, 1.5]
+      },
+      {
+        "name": "yaw",
+        "attribute": "data-dio-yaw",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Rest pose turn around the vertical axis; positive turns it as a drag to the right does.",
+        "range": [-180, 180],
+        "unit": "deg"
+      },
+      {
+        "name": "pitch",
+        "attribute": "data-dio-pitch",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Rest pose tilt toward the viewer; positive shows it from above, -20 to 20.",
+        "range": [-20, 20],
+        "unit": "deg"
+      },
+      {
+        "name": "spin",
+        "attribute": "data-dio-spin",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Turns on its own around the vertical; 0 stands still.",
+        "range": [-360, 360],
+        "unit": "deg/s"
+      },
+      {
+        "name": "turn",
+        "attribute": "data-dio-turn",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Turns as the element passes through the viewport.",
+        "range": [-720, 720],
+        "unit": "deg"
+      },
+      {
+        "name": "tilt",
+        "attribute": "data-dio-tilt",
+        "type": "number",
+        "default": 8.6,
+        "live": true,
+        "preload": true,
+        "description": "How far it leans toward the pointer.",
+        "range": [0, 35],
+        "unit": "deg"
+      },
+      {
+        "name": "drag",
+        "attribute": "data-dio-drag",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Turns it under a drag, and with the arrow keys when it has a tabindex."
+      },
+      {
+        "name": "clip",
+        "attribute": "data-dio-clip",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Clip to loop by name, `*` for the first; step keys alone draw only at each key."
+      },
+      {
+        "name": "exposure",
+        "attribute": "data-dio-exposure",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Exposure of the tone mapping.",
+        "range": [0.2, 3]
+      }
+    ],
+    "inputs": ["delta", "height", "over", "pointer", "presence", "progress", "reducedMotion", "width"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while something moves: spin, a clip, drag inertia, the tilt settling, or a color or rest pose blending. A clip whose every track steps from key to key, like the hands of a ticking watch, draws one frame per key on a timer while visible, so a watch at rest costs a frame a second. None at rest without spin and clip."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "The rest pose shows; spin, clips, scroll turn and tilt stop, and a new rest pose is taken at once. Dragging, arrow keys and color changes still work: the visitor starts them."
+    },
+    "presence": {
+      "mode": "custom",
+      "note": "Leaves by dithering its pixels away while shrinking to 96%, so its opaque materials never switch to transparent mid-transition."
+    },
+    "touch": "No tilt, nothing hovers. A finger drags the model only when the element has `touch-action: pan-y` or `none`, otherwise the gesture scrolls the page.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "The model as authored, lit by one prefiltered environment. One own material per material of the file.",
+      "memory": "Geometry and textures of the file, shared with every instance of the same URL, and the environment map.",
+      "chunk": 5300
+    },
+    "examples": [
+      {
+        "title": "Product with a poster",
+        "html": "<div class=\"viewer\" data-dio=\"model\" data-dio-src=\"/models/chair.glb\"><img src=\"/models/chair.avif\" alt=\"Lounge chair\" /></div>"
+      },
+      {
+        "title": "Colour from swatches",
+        "html": "<div class=\"viewer\" data-dio=\"model\" data-dio-src=\"/models/chair.glb\" data-dio-part=\"Fabric\" data-dio-swatches=\"#fabric\" style=\"touch-action: pan-y\"><img src=\"/models/chair.avif\" alt=\"Lounge chair\" /></div><fieldset id=\"fabric\"><label><input type=\"radio\" name=\"fabric\" value=\"#b4532a\" checked=\"\" /> Terracotta</label><label><input type=\"radio\" name=\"fabric\" value=\"oklch(35% 0.05 260)\" /> Ink</label></fieldset>"
+      },
+      {
+        "title": "Three-quarter view from above",
+        "html": "<div class=\"viewer\" data-dio=\"model\" data-dio-src=\"/models/chair.glb\" data-dio-yaw=\"35\" data-dio-pitch=\"12\"><img src=\"/models/chair.avif\" alt=\"Lounge chair\" /></div>"
+      },
+      {
+        "title": "Hero that turns on its own",
+        "html": "<div data-dio=\"model\" data-dio-src=\"/models/headphones.glb\" data-dio-spin=\"18\" data-dio-load=\"eager\"><img src=\"/img/headphones.avif\" alt=\"Headphones\" /></div>"
+      },
+      {
+        "title": "Watch with ticking hands",
+        "html": "<div class=\"viewer\" data-dio=\"model\" data-dio-src=\"/models/watch.glb\" data-dio-clip=\"Tick\"><img src=\"/models/watch.avif\" alt=\"Pocket watch\" /></div>"
+      },
+      {
+        "title": "From code",
+        "html": "<div class=\"stage\"></div>",
+        "ts": "app.attach('.stage', 'model', { src: '/models/robot.glb', clip: 'Walk', drag: false })"
+      }
+    ]
+  },
+  {
+    "name": "device",
+    "module": "model",
+    "package": "@dioramajs/model",
+    "import": "@dioramajs/model/device",
+    "builtIn": true,
+    "source": "packages/model/src/device.ts",
+    "category": "3d",
+    "tags": ["photo", "video"],
+    "summary": "A screenshot or a video shown in a 3D phone, tablet, laptop or browser window.",
+    "looks": "The picture becomes the screen of a device built in 3D with the proportions of the real one: a phone with its camera island and side keys, a tablet, an open laptop with its keyboard and trackpad, or a browser window with its toolbar. The picture covers the screen, centered across and from the top down. It rests in a slight three-quarter view, lit by a soft studio light, with a soft shadow on the page under it. It leans toward the pointer and can turn as the page scrolls.",
+    "target": "img, video: the screenshot or screen recording; the box holds the whole device and shows the plain picture without WebGL. A phone or a tablet takes the box aspect within the range of real ones, a laptop screen is 16:10, a browser window 5:4 to 12:5",
+    "media": true,
+    "bleed": 80,
+    "params": [
+      {
+        "name": "frame",
+        "attribute": "data-dio-frame",
+        "type": "choice",
+        "default": "phone",
+        "values": ["phone", "tablet", "laptop", "browser"],
+        "live": false,
+        "preload": false,
+        "description": "phone with a camera island and side keys, 16:9 to 19.5:9; tablet, 4:3 to 16:10; laptop, open with its keyboard, a 16:10 screen; browser, a window with a toolbar, 5:4 to 12:5."
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#1d1e22",
+        "live": true,
+        "preload": true,
+        "description": "Color of the body, any CSS color; the browser toolbar takes it too."
+      },
+      {
+        "name": "yaw",
+        "attribute": "data-dio-yaw",
+        "type": "number",
+        "default": -18,
+        "live": true,
+        "preload": true,
+        "description": "Rest turn around the vertical; negative shows the right side.",
+        "range": [-60, 60],
+        "unit": "deg"
+      },
+      {
+        "name": "pitch",
+        "attribute": "data-dio-pitch",
+        "type": "number",
+        "default": 6,
+        "live": true,
+        "preload": true,
+        "description": "Rest tilt toward the viewer; positive shows it from above.",
+        "range": [-30, 30],
+        "unit": "deg"
+      },
+      {
+        "name": "tilt",
+        "attribute": "data-dio-tilt",
+        "type": "number",
+        "default": 6.9,
+        "live": true,
+        "preload": true,
+        "description": "How far it leans toward the pointer.",
+        "range": [0, 30],
+        "unit": "deg"
+      },
+      {
+        "name": "turn",
+        "attribute": "data-dio-turn",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Turns it as the element passes through the viewport.",
+        "range": [-360, 360],
+        "unit": "deg"
+      },
+      {
+        "name": "radius",
+        "attribute": "data-dio-radius",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Corner rounding: 1 is the device as made, 0 square.",
+        "range": [0, 2]
+      },
+      {
+        "name": "shadow",
+        "attribute": "data-dio-shadow",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Density of the shadow on the page.",
+        "range": [0, 1]
+      },
+      {
+        "name": "scale",
+        "attribute": "data-dio-scale",
+        "type": "number",
+        "default": 0.9,
+        "live": true,
+        "preload": true,
+        "description": "Size in the box: 1 fits the device as it is seen in its rest pose, near parts larger in perspective.",
+        "range": [0.3, 1]
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "presence", "progress", "reducedMotion", "width"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while it leans toward the pointer, settles, or eases to a new rest pose, plus scroll frames with turn and video frames while a video plays. None at rest."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "It rests in its pose: no lean, no scroll turn, and a new pose is taken at once."
+    },
+    "presence": {
+      "mode": "custom",
+      "note": "Leaves by dithering its pixels away while shrinking to 96%, and its shadow fades with it."
+    },
+    "touch": "Nothing hovers, so it rests in its pose; turn still follows the scroll.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "A few hundred triangles lit by one prefiltered environment, the screen as one texture read.",
+      "memory": "The picture or the video frame, and the environment map.",
+      "chunk": 6103
+    },
+    "examples": [
+      {
+        "title": "An app screenshot in a phone",
+        "html": "<img src=\"/shots/app.png\" alt=\"The Tidewell app: today's tasks\" width=\"1170\" height=\"2532\" data-dio=\"device\" />"
+      },
+      {
+        "title": "A dashboard in a browser window",
+        "html": "<img src=\"/shots/dashboard.png\" alt=\"Analytics dashboard\" width=\"2880\" height=\"1800\" data-dio=\"device\" data-dio-frame=\"browser\" data-dio-color=\"#e9eaee\" />"
+      },
+      {
+        "title": "A screen recording in a laptop that turns with the scroll",
+        "html": "<video src=\"/shots/tour.mp4\" autoplay=\"\" muted=\"\" loop=\"\" playsinline=\"\" data-dio=\"device\" data-dio-frame=\"laptop\" data-dio-color=\"#c8cad0\" data-dio-turn=\"54\"></video>"
+      }
+    ]
+  },
+  {
+    "name": "book",
+    "module": "model",
+    "package": "@dioramajs/model",
+    "import": "@dioramajs/model/book",
+    "builtIn": true,
+    "source": "packages/model/src/book.ts",
+    "category": "3d",
+    "tags": ["photo", "gallery"],
+    "summary": "A cover image made a 3D book that turns to show its spine and opens on hover.",
+    "looks": "At rest the book faces the viewer, its cover exactly where the image was, with a soft shadow under it. Under the pointer it swings to show its spine and the front cover opens a little over the cream page edges. A drag turns it all the way round to the back cover.",
+    "target": "img: the front cover; the box is the cover, and without WebGL the plain cover image shows",
+    "media": true,
+    "bleed": 120,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "hardcover",
+        "values": ["hardcover", "paperback"],
+        "live": false,
+        "preload": false,
+        "description": "hardcover has thick boards over the pages and a rounded spine; paperback a thin flush cover and a flat spine."
+      },
+      {
+        "name": "pages",
+        "attribute": "data-dio-pages",
+        "type": "number",
+        "default": 320,
+        "live": true,
+        "preload": true,
+        "description": "Page count, which sets the thickness.",
+        "range": [16, 1600]
+      },
+      {
+        "name": "spine",
+        "attribute": "data-dio-spine",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Spine color or image URL; empty takes the color of the left edge of the cover."
+      },
+      {
+        "name": "back",
+        "attribute": "data-dio-back",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Back cover image URL or color; empty uses the spine color."
+      },
+      {
+        "name": "yaw",
+        "attribute": "data-dio-yaw",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Rest turn; positive shows the spine.",
+        "range": [-180, 180],
+        "unit": "deg"
+      },
+      {
+        "name": "swing",
+        "attribute": "data-dio-swing",
+        "type": "number",
+        "default": 36,
+        "live": true,
+        "preload": true,
+        "description": "Turn under the pointer or keyboard focus.",
+        "range": [0, 60],
+        "unit": "deg"
+      },
+      {
+        "name": "open",
+        "attribute": "data-dio-open",
+        "type": "number",
+        "default": 12,
+        "live": true,
+        "preload": true,
+        "description": "How far the front cover opens on hover.",
+        "range": [0, 60],
+        "unit": "deg"
+      },
+      {
+        "name": "tilt",
+        "attribute": "data-dio-tilt",
+        "type": "number",
+        "default": 5.7,
+        "live": true,
+        "preload": true,
+        "description": "How far it leans toward the pointer.",
+        "range": [0, 25],
+        "unit": "deg"
+      },
+      {
+        "name": "drag",
+        "attribute": "data-dio-drag",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Turns it under a drag, and with the arrow keys when it has a tabindex."
+      },
+      {
+        "name": "shadow",
+        "attribute": "data-dio-shadow",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Density of the shadow on the page.",
+        "range": [0, 1]
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "presence", "reducedMotion", "width"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while it swings, opens, leans, coasts after a drag or eases back; none at rest, and pointer moves elsewhere draw nothing."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "It rests facing the viewer: no swing, opening or lean. Dragging and arrow keys still turn it, without coasting."
+    },
+    "presence": {
+      "mode": "custom",
+      "note": "Leaves by dithering its pixels away while shrinking to 96%, and its shadow fades with it."
+    },
+    "touch": "Nothing hovers. A finger turns the book only when the element has `touch-action: pan-y` or `none`, otherwise the gesture scrolls the page.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "About two thousand triangles with a simple light, no environment map.",
+      "memory": "The cover, and the spine and back images when given.",
+      "chunk": 4950
+    },
+    "examples": [
+      {
+        "title": "A hardcover from its cover",
+        "html": "<img src=\"/books/tidewater.jpg\" alt=\"Tidewater, a novel\" width=\"800\" height=\"1200\" data-dio=\"book\" />"
+      },
+      {
+        "title": "A paperback with its own spine and back",
+        "html": "<img src=\"/books/field-notes.jpg\" alt=\"Field Notes\" width=\"800\" height=\"1200\" data-dio=\"book\" data-dio-style=\"paperback\" data-dio-pages=\"180\" data-dio-spine=\"/books/field-notes-spine.jpg\" data-dio-back=\"/books/field-notes-back.jpg\" />"
+      },
+      {
+        "title": "A course workbook turned by the arrow keys",
+        "html": "<img src=\"/course/workbook.png\" alt=\"The course workbook\" width=\"900\" height=\"1200\" data-dio=\"book\" data-dio-spine=\"#1d3b5a\" data-dio-yaw=\"20\" tabindex=\"0\" />"
+      }
+    ]
+  },
+  {
+    "name": "box",
+    "module": "model",
+    "package": "@dioramajs/model",
+    "import": "@dioramajs/model/box",
+    "builtIn": true,
+    "source": "packages/model/src/box.ts",
+    "category": "3d",
+    "tags": ["photo", "gallery"],
+    "summary": "A product box built from pictures of its faces: turn it, tilt it, open its lid.",
+    "looks": "At rest the front of the box lies exactly where the image was, with a soft shadow under it. Under the pointer the box turns to show its right side and leans toward the pointer; a drag turns it all the way round and tips it to show the top and the bottom. With a motion set, the box also opens on hover: the top flap of a folding carton swings back, the lid of a gift box lifts off, or the tray of a sleeve box slides out, and the box leans forward so the inside shows.",
+    "target": "img: the front of the box; its aspect is the front of the box, and without WebGL the plain front image shows",
+    "media": true,
+    "bleed": 160,
+    "params": [
+      {
+        "name": "motion",
+        "attribute": "data-dio-motion",
+        "type": "choice",
+        "default": "none",
+        "values": ["none", "flap", "lift", "drawer"],
+        "live": false,
+        "preload": false,
+        "description": "How the box opens on hover, click or Enter. none stays closed; flap swings the top back on a hinge, as on a folding carton of tea or cosmetics; lift raises a lid over the top fifth, as on a rigid gift box; drawer slides a tray out of a sleeve to the right, as on a box of chocolates or a phone."
+      },
+      {
+        "name": "back",
+        "attribute": "data-dio-back",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Back face image URL or color; empty prints the front on the back too."
+      },
+      {
+        "name": "left",
+        "attribute": "data-dio-left",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Left side image URL or color; empty takes the right side picture, else the color of the left edge of the front."
+      },
+      {
+        "name": "right",
+        "attribute": "data-dio-right",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Right side image URL or color; empty takes the left side picture, else the color of the right edge of the front."
+      },
+      {
+        "name": "top",
+        "attribute": "data-dio-top",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Top face image URL or color, its top edge toward the back; empty takes the bottom picture, else the color of the top edge of the front."
+      },
+      {
+        "name": "bottom",
+        "attribute": "data-dio-bottom",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Bottom face image URL or color; empty takes the top picture, else the color of the bottom edge of the front."
+      },
+      {
+        "name": "inside",
+        "attribute": "data-dio-inside",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Color of the bare board inside an opening box; empty is an off-white board."
+      },
+      {
+        "name": "depth",
+        "attribute": "data-dio-depth",
+        "type": "number",
+        "default": "auto",
+        "live": false,
+        "preload": false,
+        "description": "Depth as a share of the front width, so an 18 × 24 × 6 cm box has 0.33, and 0 a flat card; auto takes it from the side picture, else the top picture, else 0.3.",
+        "range": [0, 2]
+      },
+      {
+        "name": "yaw",
+        "attribute": "data-dio-yaw",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Rest turn; positive shows the right side.",
+        "range": [-180, 180],
+        "unit": "deg"
+      },
+      {
+        "name": "pitch",
+        "attribute": "data-dio-pitch",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Rest tilt; positive shows the top.",
+        "range": [-80, 80],
+        "unit": "deg"
+      },
+      {
+        "name": "swing",
+        "attribute": "data-dio-swing",
+        "type": "number",
+        "default": 30,
+        "live": true,
+        "preload": true,
+        "description": "Turn under the pointer or keyboard focus: 0 keeps it facing the viewer.",
+        "range": [-90, 90],
+        "unit": "deg"
+      },
+      {
+        "name": "open",
+        "attribute": "data-dio-open",
+        "type": "number",
+        "default": 0.6,
+        "live": true,
+        "preload": true,
+        "description": "Share of the full opening shown on hover; a click or Enter opens it all the way. 0 keeps it shut.",
+        "range": [0, 1]
+      },
+      {
+        "name": "tilt",
+        "attribute": "data-dio-tilt",
+        "type": "number",
+        "default": 5.7,
+        "live": true,
+        "preload": true,
+        "description": "How far it leans toward the pointer: 0 turns the lean off.",
+        "range": [0, 25],
+        "unit": "deg"
+      },
+      {
+        "name": "spin",
+        "attribute": "data-dio-spin",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Idle turn while nobody touches the box, pausing under the pointer and for 1.5 s after: 0 turns it off.",
+        "range": [-180, 180],
+        "unit": "deg/s"
+      },
+      {
+        "name": "drag",
+        "attribute": "data-dio-drag",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Turns and tips it under a drag, and with the arrow keys when it has a tabindex."
+      },
+      {
+        "name": "shadow",
+        "attribute": "data-dio-shadow",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Density of the shadow on the page.",
+        "range": [0, 1]
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "presence", "reducedMotion", "width"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while it turns, leans, opens, coasts after a drag or eases back, and while spin turns it; none at rest, and pointer moves elsewhere draw nothing."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "It rests as posed: no swing, lean or spin, and hover does not open it. A click or Enter still opens it, at once; dragging and arrow keys still turn it, without coasting."
+    },
+    "presence": {
+      "mode": "custom",
+      "note": "Leaves by dithering its pixels away while shrinking to 96%, and its shadow fades with it."
+    },
+    "touch": "Nothing hovers. A tap opens and closes a box with a motion, unless the image sits in a link or a button. A finger turns the box only when the element has `touch-action: pan-y` or `none`, and tips it only with `none`; otherwise the gesture scrolls the page.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "Six to twenty flat faces with a simple light, no environment map.",
+      "memory": "The front image, and the pictures of the other faces when given.",
+      "chunk": 5042
+    },
+    "examples": [
+      {
+        "title": "A carton from its front and one side",
+        "html": "<img src=\"/shop/tea-front.webp\" alt=\"Morning Hills green tea, 20 bags\" width=\"600\" height=\"800\" data-dio=\"box\" data-dio-right=\"/shop/tea-side.webp\" />"
+      },
+      {
+        "title": "A gift box that lifts its lid, turned by the keys",
+        "html": "<img src=\"/shop/gift-front.webp\" alt=\"The holiday gift set\" width=\"900\" height=\"600\" data-dio=\"box\" data-dio-motion=\"lift\" data-dio-top=\"/shop/gift-top.webp\" data-dio-inside=\"#7a1f2b\" data-dio-depth=\"0.6\" tabindex=\"0\" />"
+      },
+      {
+        "title": "A game box that turns on its own",
+        "html": "<img src=\"/games/harbor-front.webp\" alt=\"Harbor Lights, a board game for 2 to 4 players\" width=\"800\" height=\"800\" data-dio=\"box\" data-dio-depth=\"0.25\" data-dio-back=\"/games/harbor-back.webp\" data-dio-yaw=\"-20\" data-dio-spin=\"18\" />"
+      }
+    ]
+  },
+  {
+    "name": "explode",
+    "module": "model",
+    "package": "@dioramajs/model",
+    "import": "@dioramajs/model/explode",
+    "builtIn": true,
+    "source": "packages/model/src/explode.ts",
+    "category": "3d",
+    "tags": ["scroll"],
+    "summary": "An exploded view of a model: its parts move apart as the section scrolls.",
+    "looks": "Works on the `model` of the same element. As the visitor scrolls through a sticky section, the parts of the product move apart one after another, the outer ones first, and come back together on the way up, so a page can show what is inside headphones, a watch, a speaker or a chair. The model shrinks a little as it opens so the exploded view stays in its box, and can turn as it opens. Drag, swatches and the rest pose of `model` keep working.",
+    "target": "an element with the `model` effect: `data-dio=\"model explode\"`, inside a tall `data-dio-section` with a sticky stage",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "mode",
+        "attribute": "data-dio-mode",
+        "type": "choice",
+        "default": "radial",
+        "values": ["radial", "axis", "extras"],
+        "live": false,
+        "preload": false,
+        "description": "radial moves each part away from the center by its own distance; axis stacks the parts in even levels along `axis`, like a watch or a speaker taken apart; extras takes the offsets the modeler wrote as glTF node extras `\"explode\": [x, y, z]`, in model units."
+      },
+      {
+        "name": "by",
+        "attribute": "data-dio-by",
+        "type": "choice",
+        "default": "pin",
+        "values": ["pin", "progress", "manual"],
+        "live": false,
+        "preload": false,
+        "description": "What drives it: pin of the sticky section, viewport progress, or `position` alone for a button or a tween."
+      },
+      {
+        "name": "pieces",
+        "attribute": "data-dio-pieces",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Node names of the parts to move, comma separated; empty takes the children of the model root (or every node with extras in extras mode)."
+      },
+      {
+        "name": "axis",
+        "attribute": "data-dio-axis",
+        "type": "vec3",
+        "default": [0, 1, 0],
+        "live": false,
+        "preload": false,
+        "description": "Direction of the axis mode, in model coordinates: x y z.",
+        "range": [-1, 1]
+      },
+      {
+        "name": "spread",
+        "attribute": "data-dio-spread",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "How far the parts move: 1 as the mode lays them out, 0 keeps them in place.",
+        "range": [0, 3]
+      },
+      {
+        "name": "start",
+        "attribute": "data-dio-start",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Progress at which the parts start to move.",
+        "range": [0, 1],
+        "unit": "fraction"
+      },
+      {
+        "name": "end",
+        "attribute": "data-dio-end",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "Progress at which they are fully apart.",
+        "range": [0, 1],
+        "unit": "fraction"
+      },
+      {
+        "name": "position",
+        "attribute": "data-dio-position",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "How far apart with `by=\"manual\"`: 0 assembled, 1 exploded.",
+        "range": [0, 1],
+        "unit": "fraction"
+      },
+      {
+        "name": "cascade",
+        "attribute": "data-dio-cascade",
+        "type": "number",
+        "default": 0.3,
+        "live": true,
+        "preload": true,
+        "description": "Share of the run by which the parts start one after another, outer ones first.",
+        "range": [0, 0.9],
+        "unit": "fraction"
+      },
+      {
+        "name": "twist",
+        "attribute": "data-dio-twist",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Turns around the vertical while it opens; 0 does not turn.",
+        "range": [-360, 360],
+        "unit": "deg"
+      },
+      {
+        "name": "ease",
+        "attribute": "data-dio-ease",
+        "type": "number",
+        "default": 0.15,
+        "live": true,
+        "preload": true,
+        "description": "Time the parts take to catch up with the scroll; 0 follows it exactly.",
+        "range": [0, 1],
+        "unit": "s"
+      },
+      {
+        "name": "contain",
+        "attribute": "data-dio-contain",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Keeps every part inside the box at every step: the model shrinks and recenters as it opens, measured in its rest pose and in perspective."
+      }
+    ],
+    "inputs": [],
+    "frames": {
+      "policy": "update",
+      "note": "Only on scroll, and while the parts catch up with it for `ease` seconds; none at rest."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "The exploded view stands still, parts apart and without the turn, wherever the page is scrolled. With `by=\"manual\"` the parts jump to `position` without easing."
+    },
+    "presence": {
+      "mode": "custom",
+      "note": "Nothing of its own: the model leaves by dithering, with its parts where they are."
+    },
+    "touch": "Scroll drives it, so touch works as on desktop.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "None of its own: the model draws as it does without it.",
+      "memory": "A few vectors per part.",
+      "chunk": 2429
+    },
+    "examples": [
+      {
+        "title": "Speaker taken apart in a sticky section",
+        "html": "<section data-dio-section=\"\" style=\"height: 300vh\"><div style=\"position: sticky; top: 0; height: 100vh\"><div class=\"viewer\" data-dio=\"model explode\" data-dio-src=\"/models/speaker.glb\" data-dio-mode=\"axis\"><img src=\"/models/speaker.avif\" alt=\"Speaker\" /></div></div></section>"
+      },
+      {
+        "title": "Offsets from the model file",
+        "html": "<div class=\"viewer\" data-dio=\"model explode\" data-dio-src=\"/models/watch.glb\" data-dio-mode=\"extras\" data-dio-twist=\"90\"><img src=\"/models/watch.avif\" alt=\"Watch\" /></div>"
+      },
+      {
+        "title": "A button opens it",
+        "html": "<div class=\"viewer\" data-dio=\"model explode\" data-dio-src=\"/models/chair.glb\" data-dio-by=\"manual\"><img src=\"/models/chair.avif\" alt=\"Chair\" /></div><button type=\"button\" onclick=\"this.previousElementSibling.dataset.dioPosition = this.previousElementSibling.dataset.dioPosition === '1' ? '0' : '1'\">Take apart</button>"
+      }
+    ]
+  },
+  {
+    "name": "hotspots",
+    "module": "model",
+    "package": "@dioramajs/model",
+    "import": "@dioramajs/model/hotspots",
+    "builtIn": true,
+    "source": "packages/model/src/hotspots.ts",
+    "category": "3d",
+    "summary": "Feature callouts pinned to points of a model, real buttons that follow it as it turns.",
+    "looks": "Goes on a parent of a `model` element. Its children with `data-dio-at` are lifted out of the flow and follow their points on the model while it turns, is dragged or explodes; a label whose point turns to the back of the model fades out and comes back as the point turns round. Focusing a label, by Tab or a click, turns the model to face its point. The labels stay ordinary buttons or links styled by the page, so keyboard, screen readers and the page without WebGL see a plain list.",
+    "target": "a parent of the `data-dio=\"model\"` element, holding the labels next to it: the drawn model element hides its own children. Labels get a z-index above a canvas over the page; a sticky stage around them needs one too, or the model covers them (a development note names it)",
+    "bleed": 0,
+    "params": [
+      {
+        "name": "model",
+        "attribute": "data-dio-model",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Selector of the model element, looked up inside the element and then in the page; empty takes the first `data-dio=\"model\"` inside."
+      },
+      {
+        "name": "occlude",
+        "attribute": "data-dio-occlude",
+        "type": "choice",
+        "default": "normal",
+        "values": ["normal", "ray", "none"],
+        "live": false,
+        "preload": false,
+        "description": "normal hides a point label whose point faces away from the viewer (from the center of the model, or along `data-dio-normal`), and a node label once its part is well behind the center, so exploded parts keep theirs; ray hides a label wherever the model covers its point, for rooms, hollow shapes and parts inside a shell, settling a moment after the model stops; none never hides."
+      },
+      {
+        "name": "face",
+        "attribute": "data-dio-face",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Focusing a label turns the model to face its point."
+      }
+    ],
+    "inputs": ["height", "presence", "width", "x", "y"],
+    "frames": {
+      "policy": "input",
+      "note": "None of its own: labels move in the frames the model draws, written once per frame as a transform and two custom properties. Card sizes are read once and on resize. Focusing a label draws the turn of the model."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "Labels follow the model as it stands; focusing a label turns the model at once, without easing."
+    },
+    "presence": {
+      "mode": "custom",
+      "note": "Labels fade with the model during a page transition."
+    },
+    "touch": "A tap on a label is a click and turns the model to it; a press on a label never starts a drag of the model.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "None: the labels are DOM.",
+      "memory": "One empty node per label. With `occlude=\"ray\"`, a ray test against the model for two labels per frame and for all of them once it stops.",
+      "chunk": 4453
+    },
+    "examples": [
+      {
+        "title": "Feature callouts on a speaker",
+        "html": "<figure class=\"product\" data-dio=\"hotspots\"><div class=\"viewer\" data-dio=\"model\" data-dio-src=\"/models/speaker.glb\" style=\"touch-action: pan-y\"><img src=\"/models/speaker.avif\" alt=\"Speaker\" /></div><button type=\"button\" class=\"spot\" data-dio-at=\"Driver\">50 mm driver</button><button type=\"button\" class=\"spot\" data-dio-at=\"Battery\">12 h battery</button><button type=\"button\" class=\"spot\" data-dio-at=\"0 0.17 0\">Volume</button></figure>"
+      },
+      {
+        "title": "Room highlights with real occlusion",
+        "html": "<div class=\"plan\" data-dio=\"hotspots\" data-dio-occlude=\"ray\"><div class=\"viewer\" data-dio=\"model\" data-dio-src=\"/models/flat.glb\"><img src=\"/models/flat.avif\" alt=\"Two-room flat\" /></div><ul><li><a class=\"spot\" href=\"#kitchen\" data-dio-at=\"1.2 0.9 -0.4\">Kitchen</a></li><li><a class=\"spot\" href=\"#balcony\" data-dio-at=\"-2 1 1.5\">Balcony</a></li></ul></div>"
+      },
+      {
+        "title": "Labels on an exploded view",
+        "html": "<div class=\"product\" data-dio=\"hotspots\"><div class=\"viewer\" data-dio=\"model explode\" data-dio-src=\"/models/speaker.glb\" data-dio-mode=\"extras\"><img src=\"/models/speaker.avif\" alt=\"Speaker\" /></div><button type=\"button\" class=\"spot\" data-dio-at=\"Board\">Bluetooth 5.4</button></div>"
+      }
+    ],
+    "children": [
+      {
+        "attribute": "data-dio-at",
+        "description": "A point in the model file's own coordinates as x y z (Alt+click on the model logs one in development), or the name of a node whose center the label follows, also while `explode` moves it."
+      },
+      {
+        "attribute": "data-dio-normal",
+        "description": "The direction the point faces as x y z, for the normal test; without it, the direction from the center of the model."
+      },
+      {
+        "attribute": "data-dio-side",
+        "description": "Set by the effect to `left` or `right`: the side of the model the label's point is on, where its card goes. With it come `--dio-reach`, px from the point to the near edge of the card, just past the model's edge and inside the element, and `--dio-shift`, px from the point to the middle of the card, so the cards on a side never overlap. The card is the label's last child element, or the label itself; place it with these in CSS."
+      },
+      {
+        "attribute": "data-dio-away",
+        "description": "Set by the effect on a label turned away, which also gets opacity 0; add `transition: opacity 0.2s` to fade it."
+      }
+    ]
+  },
+  {
+    "name": "coin",
+    "module": "model",
+    "package": "@dioramajs/model",
+    "import": "@dioramajs/model/coin",
+    "builtIn": true,
+    "source": "packages/model/src/coin.ts",
+    "category": "3d",
+    "tags": ["photo", "block"],
+    "summary": "A coin, medal or token struck from a logo or a photo: it turns, catches the light and flips over.",
+    "looks": "The image becomes the face of a metal disc with a rim, as thick as a real coin, lying where the image was with a soft shadow under it. A transparent logo is struck into the metal: its shapes stand out in relief, in their own colors or in bare metal, and the field around them is polished metal that mirrors a small studio. A photo of a coin keeps its own look. The coin leans toward the pointer so the light runs over it, turns under a drag to show its edge and its back, and a click turns it over or tosses it so it lands on the other face.",
+    "target": "img: the front face, the circle in the middle of its box; a transparent PNG or SVG logo, or a photo of a coin cut out round. Without WebGL the plain image shows",
+    "media": true,
+    "bleed": 120,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "coin",
+        "values": ["coin", "medal", "token"],
+        "live": false,
+        "preload": false,
+        "description": "Shape of the object. coin: a thin disc with a narrow rim and a reeded edge, for coins and tokens of crypto and fintech sites; medal: thicker, with a wide polished rim and a smooth edge, for awards and badges; token: a thick enamel token whose edge is striped in metal and white, for loyalty programs and games."
+      },
+      {
+        "name": "motion",
+        "attribute": "data-dio-motion",
+        "type": "choice",
+        "default": "flip",
+        "values": ["flip", "toss", "none"],
+        "live": false,
+        "preload": false,
+        "description": "What a click or Enter does. flip turns it over about its vertical axis; toss throws it up, tumbling, to land on the other face; none keeps the click for the page."
+      },
+      {
+        "name": "back",
+        "attribute": "data-dio-back",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Back face image URL or color; empty strikes the front on the back too. A color makes a plain back of that color with the rim."
+      },
+      {
+        "name": "metal",
+        "attribute": "data-dio-metal",
+        "type": "color",
+        "default": "#d4af5f",
+        "live": true,
+        "preload": true,
+        "description": "Color of the metal: the rim, the edge and the field around a logo. On a token, the color of its enamel."
+      },
+      {
+        "name": "ink",
+        "attribute": "data-dio-ink",
+        "type": "number",
+        "default": 1,
+        "live": true,
+        "preload": true,
+        "description": "How much the picture keeps its own colors: 1 prints them, 0 strikes it in bare metal, so only its relief shows.",
+        "range": [0, 1]
+      },
+      {
+        "name": "relief",
+        "attribute": "data-dio-relief",
+        "type": "number",
+        "default": 0.6,
+        "live": true,
+        "preload": true,
+        "description": "How far the shapes of a transparent logo and the rim stand out: 0 keeps the face flat.",
+        "range": [0, 1]
+      },
+      {
+        "name": "yaw",
+        "attribute": "data-dio-yaw",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Rest turn; positive shows the right edge.",
+        "range": [-180, 180],
+        "unit": "deg"
+      },
+      {
+        "name": "pitch",
+        "attribute": "data-dio-pitch",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Rest tilt; positive shows the top edge.",
+        "range": [-70, 70],
+        "unit": "deg"
+      },
+      {
+        "name": "tilt",
+        "attribute": "data-dio-tilt",
+        "type": "number",
+        "default": 14.3,
+        "live": true,
+        "preload": true,
+        "description": "How far it leans toward the pointer: 0 turns the lean off.",
+        "range": [0, 35],
+        "unit": "deg"
+      },
+      {
+        "name": "turn",
+        "attribute": "data-dio-turn",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Turns while the page scrolls past: 360 is a whole turn from entering the viewport to leaving it. 0 turns it off.",
+        "range": [-720, 720],
+        "unit": "deg"
+      },
+      {
+        "name": "spin",
+        "attribute": "data-dio-spin",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Idle turn while nobody touches it, pausing under the pointer and for 1.5 s after: 0 turns it off.",
+        "range": [-360, 360],
+        "unit": "deg/s"
+      },
+      {
+        "name": "drag",
+        "attribute": "data-dio-drag",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Turns and tips it under a drag, and with the arrow keys when it has a tabindex."
+      },
+      {
+        "name": "shadow",
+        "attribute": "data-dio-shadow",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Density of the shadow on the page.",
+        "range": [0, 1]
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "presence", "reducedMotion", "width"],
+    "frames": {
+      "policy": "update",
+      "note": "Only while it turns, leans, coasts after a drag, flips, and while spin turns it; none at rest, and pointer moves elsewhere draw nothing. Scroll draws frames only with turn."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "It rests as posed: no lean, spin or scroll turn. A click or Enter turns it over at once, without the flip or the toss; dragging and arrow keys still turn it, without coasting."
+    },
+    "presence": {
+      "mode": "custom",
+      "note": "Leaves by dithering its pixels away while shrinking to 96%, and its shadow fades with it."
+    },
+    "touch": "Nothing leans. A tap flips it, unless the image sits in a link or a button. A finger turns it only when the element has `touch-action: pan-y` or `none`, and tips it only with `none`; otherwise the gesture scrolls the page.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "A disc of about seven hundred triangles; five reads of the picture per pixel of a face for its relief, no environment map.",
+      "memory": "The front image, and the back image when given.",
+      "chunk": 5405
+    },
+    "examples": [
+      {
+        "title": "A brand logo struck as a gold coin",
+        "html": "<img src=\"/brand/logo.svg\" alt=\"Northwind Bank\" width=\"512\" height=\"512\" data-dio=\"coin\" tabindex=\"0\" />"
+      },
+      {
+        "title": "An award medal with its back, tossed on a click",
+        "html": "<img src=\"/awards/2026-front.png\" alt=\"Best Studio 2026, gold\" width=\"600\" height=\"600\" data-dio=\"coin\" data-dio-style=\"medal\" data-dio-motion=\"toss\" data-dio-back=\"/awards/2026-back.png\" />"
+      },
+      {
+        "title": "A loyalty token that turns with the scroll",
+        "html": "<img src=\"/club/star.png\" alt=\"Star member token\" width=\"400\" height=\"400\" data-dio=\"coin\" data-dio-style=\"token\" data-dio-metal=\"#1f6f5c\" data-dio-turn=\"180\" />"
+      }
+    ]
+  },
+  {
+    "name": "vinyl",
+    "module": "model",
+    "package": "@dioramajs/model",
+    "import": "@dioramajs/model/vinyl",
+    "builtIn": true,
+    "source": "packages/model/src/vinyl.ts",
+    "category": "3d",
+    "tags": ["audio", "photo"],
+    "summary": "An album cover becomes a record sleeve: the disc slides out and spins.",
+    "looks": "At rest the sleeve lies exactly where the cover image was, with a soft shadow under it. On hover, once in view or while its player plays, a record slides out of the sleeve to the right and spins at 33 rpm, its grooves catching a sheen of light that stays put while the disc turns. The center label carries the cover or a picture of its own. The sleeve leans a little toward the pointer.",
+    "target": "img: the cover, the front of the sleeve. Without WebGL, or with reduced motion and a still record, the plain cover shows",
+    "media": true,
+    "bleed": 240,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "black",
+        "values": ["black", "color", "picture", "cd"],
+        "live": false,
+        "preload": false,
+        "description": "Kind of disc. black: classic black vinyl with grooves; color: colored vinyl in color; picture: a picture disc printed with the label image or the cover; cd: a silver compact disc with the rainbow of its tracks."
+      },
+      {
+        "name": "trigger",
+        "attribute": "data-dio-trigger",
+        "type": "choice",
+        "default": "hover",
+        "values": ["hover", "view", "play"],
+        "live": false,
+        "preload": false,
+        "description": "What brings the record out. hover: the pointer or keyboard focus, and a click or Enter keeps it out; view: it slides out once the sleeve is well in view and stays; play: it comes out and spins while the player named by for plays, and a click or Enter plays or pauses it."
+      },
+      {
+        "name": "for",
+        "attribute": "data-dio-for",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "CSS selector of the <audio> or <video> for trigger play; empty takes the closest one before the image in its parent, else the first one in the parent."
+      },
+      {
+        "name": "label",
+        "attribute": "data-dio-label",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Center label image URL or color; empty shows the middle of the cover. With style picture, the image printed on the disc."
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "color",
+        "default": "#c8323c",
+        "live": true,
+        "preload": true,
+        "description": "Color of the vinyl with style color."
+      },
+      {
+        "name": "out",
+        "attribute": "data-dio-out",
+        "type": "number",
+        "default": 0.55,
+        "live": true,
+        "preload": true,
+        "description": "How far the record comes out, as a share of its diameter: 0 keeps it in the sleeve, 1 takes it all the way out.",
+        "range": [0, 1]
+      },
+      {
+        "name": "rpm",
+        "attribute": "data-dio-rpm",
+        "type": "number",
+        "default": 33,
+        "live": true,
+        "preload": true,
+        "description": "Turntable speed while it spins, in turns a minute: 33, 45 or 78. 0 keeps it still.",
+        "range": [0, 78]
+      },
+      {
+        "name": "tilt",
+        "attribute": "data-dio-tilt",
+        "type": "number",
+        "default": 6.9,
+        "live": true,
+        "preload": true,
+        "description": "How far it leans toward the pointer: 0 turns the lean off.",
+        "range": [0, 25],
+        "unit": "deg"
+      },
+      {
+        "name": "shadow",
+        "attribute": "data-dio-shadow",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Density of the shadow on the page.",
+        "range": [0, 1]
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "presence", "reducedMotion", "width"],
+    "frames": {
+      "policy": "fps",
+      "note": "Only while the record slides, spins up or down, and spins; none at rest, and pointer moves elsewhere draw nothing. With trigger play, none while the player is paused."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "The record comes out and goes back at once and never spins; the triggers work as usual."
+    },
+    "presence": {
+      "mode": "custom",
+      "note": "Leaves by dithering its pixels away while shrinking to 96%, and its shadow fades with it."
+    },
+    "touch": "Nothing hovers. A tap brings the record out and back with trigger hover, plays and pauses with trigger play, unless the image sits in a link or a button.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "Two thin discs and a sleeve, a few hundred triangles; the grooves are drawn, not modelled.",
+      "memory": "The cover image, and the label image when given.",
+      "chunk": 5312
+    },
+    "examples": [
+      {
+        "title": "An album that shows its record on hover",
+        "html": "<img src=\"/releases/tidelines.webp\" alt=\"Tidelines, the debut album by Harbor Lights\" width=\"600\" height=\"600\" data-dio=\"vinyl\" tabindex=\"0\" />"
+      },
+      {
+        "title": "A record that spins while its track plays",
+        "html": "<figure><audio src=\"/audio/tidelines-preview.mp3\" controls=\"\"></audio><img src=\"/releases/tidelines.webp\" alt=\"Tidelines cover\" width=\"600\" height=\"600\" data-dio=\"vinyl\" data-dio-trigger=\"play\" data-dio-label=\"/releases/tidelines-label.webp\" /></figure>"
+      },
+      {
+        "title": "Colored vinyl that slides out in view",
+        "html": "<img src=\"/shop/limited.webp\" alt=\"Limited edition on red vinyl\" width=\"500\" height=\"500\" data-dio=\"vinyl\" data-dio-style=\"color\" data-dio-color=\"#d0342c\" data-dio-trigger=\"view\" />"
+      }
+    ]
+  },
+  {
+    "name": "label",
+    "module": "model",
+    "package": "@dioramajs/model",
+    "import": "@dioramajs/model/label",
+    "builtIn": true,
+    "source": "packages/model/src/label.ts",
+    "category": "3d",
+    "tags": ["photo", "scroll"],
+    "summary": "A flat label wrapped around a can, a bottle or a jar that turns to show all of it.",
+    "looks": "The label image is wrapped around a 3D container standing in the box of the element: printed on an aluminium can, glued on a glass bottle with a foil cap, or around a glass jar with a lid. It keeps its proportions, so its width decides how far around the body it reaches. The container turns as the page scrolls past and under a drag, leans toward the pointer, and the light runs over the metal, the glass and the print.",
+    "target": "img: the flat label, its whole width as printed; the container stands in the box of the image, as tall as fits. Without WebGL the plain label shows",
+    "media": true,
+    "bleed": 80,
+    "params": [
+      {
+        "name": "style",
+        "attribute": "data-dio-style",
+        "type": "choice",
+        "default": "can",
+        "values": ["can", "bottle", "jar"],
+        "live": false,
+        "preload": false,
+        "description": "Kind of container. can: a 330 ml drinks can, the label printed all around its body, for beer, soda and coffee; bottle: a 750 ml bottle of colored glass with a foil cap, the label on its body, for wine, spirits and oils; jar: a squat glass jar with a twist lid, for cosmetics, honey, coffee and sauces."
+      },
+      {
+        "name": "color",
+        "attribute": "data-dio-color",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Color of the body: the metal of a can, the glass of a bottle, what fills a jar. Empty takes the default of the style: aluminium, green glass, amber."
+      },
+      {
+        "name": "cap",
+        "attribute": "data-dio-cap",
+        "type": "string",
+        "default": "",
+        "live": false,
+        "preload": false,
+        "description": "Color of the cap: the lid of a can, the foil of a bottle, the lid of a jar. Empty takes the default of the style."
+      },
+      {
+        "name": "yaw",
+        "attribute": "data-dio-yaw",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Rest turn; 0 shows the middle of the label.",
+        "range": [-180, 180],
+        "unit": "deg"
+      },
+      {
+        "name": "pitch",
+        "attribute": "data-dio-pitch",
+        "type": "number",
+        "default": 8,
+        "live": true,
+        "preload": true,
+        "description": "Rest tilt; positive shows the top, as seen from a little above.",
+        "range": [-35, 35],
+        "unit": "deg"
+      },
+      {
+        "name": "tilt",
+        "attribute": "data-dio-tilt",
+        "type": "number",
+        "default": 6.9,
+        "live": true,
+        "preload": true,
+        "description": "How far it leans toward the pointer: 0 turns the lean off.",
+        "range": [0, 25],
+        "unit": "deg"
+      },
+      {
+        "name": "turn",
+        "attribute": "data-dio-turn",
+        "type": "number",
+        "default": 180,
+        "live": true,
+        "preload": true,
+        "description": "Turns while the page scrolls past: 360 is a whole turn from entering the viewport to leaving it, 180 shows the label from one end to the other. 0 turns it off.",
+        "range": [-720, 720],
+        "unit": "deg"
+      },
+      {
+        "name": "spin",
+        "attribute": "data-dio-spin",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Idle turn while nobody touches it, pausing under the pointer and for 1.5 s after: 0 turns it off.",
+        "range": [-180, 180],
+        "unit": "deg/s"
+      },
+      {
+        "name": "gloss",
+        "attribute": "data-dio-gloss",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Shine of the light on the print: 0 is matte paper.",
+        "range": [0, 1]
+      },
+      {
+        "name": "drag",
+        "attribute": "data-dio-drag",
+        "type": "boolean",
+        "default": true,
+        "live": true,
+        "preload": true,
+        "description": "Turns it under a drag and tips it a little, and with the arrow keys when it has a tabindex."
+      },
+      {
+        "name": "shadow",
+        "attribute": "data-dio-shadow",
+        "type": "number",
+        "default": 0.5,
+        "live": true,
+        "preload": true,
+        "description": "Density of the shadow on the page.",
+        "range": [0, 1]
+      }
+    ],
+    "inputs": ["delta", "height", "opacity", "presence", "progress", "reducedMotion", "width"],
+    "frames": {
+      "policy": "update",
+      "note": "While the page scrolls with turn, and while it leans, coasts after a drag, eases a key step, or spin turns it; none at rest, and pointer moves elsewhere draw nothing."
+    },
+    "reducedMotion": {
+      "mode": "static",
+      "note": "It rests as posed: no lean, spin or scroll turn. Dragging and arrow keys still turn it, without coasting."
+    },
+    "presence": {
+      "mode": "custom",
+      "note": "Leaves by dithering its pixels away while shrinking to 96%, and its shadow fades with it."
+    },
+    "touch": "Nothing leans; the scroll turns it. A finger turns it only when the element has `touch-action: pan-y` or `none`, and tips it only with `none`; otherwise the gesture scrolls the page.",
+    "quality": {
+      "min": "low",
+      "notes": {}
+    },
+    "cost": {
+      "gpu": "One body of about two thousand triangles with a simple light, no environment map.",
+      "memory": "The label image.",
+      "chunk": 4506
+    },
+    "examples": [
+      {
+        "title": "A can that turns as the page scrolls",
+        "html": "<img src=\"/beer/pale-ale-label.webp\" alt=\"Harbor Pale Ale label: 5.2% ABV, brewed with Citra hops\" width=\"1240\" height=\"560\" data-dio=\"label\" style=\"width: 240px; height: 360px; object-fit: contain\" />"
+      },
+      {
+        "title": "A wine bottle turned by a drag",
+        "html": "<img src=\"/wines/2024-label.webp\" alt=\"Hillside Riesling 2024 label\" width=\"800\" height=\"960\" data-dio=\"label\" data-dio-style=\"bottle\" data-dio-turn=\"0\" tabindex=\"0\" style=\"width: 200px; height: 520px; object-fit: contain; touch-action: pan-y\" />"
+      },
+      {
+        "title": "A jar of honey with a gold lid",
+        "html": "<img src=\"/shop/honey-label.webp\" alt=\"Wildflower honey, 250 g\" width=\"1500\" height=\"500\" data-dio=\"label\" data-dio-style=\"jar\" data-dio-color=\"#c98a1b\" data-dio-cap=\"#b8902f\" style=\"width: 300px; height: 300px; object-fit: contain\" />"
+      }
+    ]
+  }
+]

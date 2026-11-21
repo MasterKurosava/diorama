@@ -1,130 +1,10 @@
-import type { Anchor } from '@diorama/core'
-import type { Box, Copy, Crop, DrawnBox } from '@diorama/effects'
+// The two kinds of moving copies a transition steps: a flight (a keyed pair flying from the old
+// element to the new one) and a presence (an unpaired copy fading out or in).
+import type { Anchor } from '@dioramajs/core'
+import type { Box, Copy, Crop } from '@dioramajs/effects'
+import { alike, clamp, framing, type Pose, poseOf } from './geometry'
 import type { Source } from './transition'
-import type { Ease, Flight, FlightState, Presence } from './types'
-
-/** Viewport box, radius and alpha a copy is drawn with. */
-export type Pose = DrawnBox
-
-export const clamp = (value: number): number => Math.min(1, Math.max(0, value))
-export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t
-/** Cubic in-out. */
-export const cubic: Ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
-/** 0 up to `a`, 1 from `b`, smooth in between. */
-export const smooth = (a: number, b: number, x: number): number => {
-  const t = b > a ? clamp((x - a) / (b - a)) : +(x >= b)
-  return t * t * (3 - 2 * t)
-}
-export const noop = (): void => {}
-
-/** Moves box `a` on by velocity `v` for `t` seconds. */
-export const push = (a: Box, v: Box, t: number): Box => ({
-  x: a.x + v.x * t,
-  y: a.y + v.y * t,
-  width: Math.max(1, a.width + v.width * t),
-  height: Math.max(1, a.height + v.height * t),
-})
-
-/** Width over height of the picture a crop shows in a box (object-fit keeps it). */
-export const aspect = (crop: Crop, box: Box): number =>
-  (crop.height * box.width) / (crop.width * box.height)
-
-/** Both crops show the same picture, give or take 1% of aspect ratio. */
-export const alike = (a: Crop, aBox: Box, b: Crop, bBox: Box): boolean =>
-  Math.abs(aspect(a, aBox) / aspect(b, bBox) - 1) < 0.01
-
-const inside = (start: number, size: number): number =>
-  size <= 1 ? Math.min(Math.max(start, 0), 1 - size) : start
-
-// Interpolates zoom and centre between `a` in `aBox` and `b` in `bBox`, drawn in `box`. Never
-// stretches, so the content moves with the box instead of sliding inside it. Exact at both ends.
-export function framing(a: Crop, aBox: Box, b: Crop, bBox: Box, box: Box, t: number): Crop {
-  const zoom = lerp(aBox.width / a.width, bBox.width / b.width, t)
-  const width = box.width / zoom
-  const height = (box.height * aspect(a, aBox)) / zoom
-  const x = lerp(a.x + a.width / 2, b.x + b.width / 2, t) - width / 2
-  const y = lerp(a.y + a.height / 2, b.y + b.height / 2, t) - height / 2
-  return { x: inside(x, width), y: inside(y, height), width, height }
-}
-
-export const rate = (a: Box, b: Box, dt: number): Box => ({
-  x: (b.x - a.x) / dt,
-  y: (b.y - a.y) / dt,
-  width: (b.width - a.width) / dt,
-  height: (b.height - a.height) / dt,
-})
-
-/** The farthest any edge of `a` is from the same edge of `b`. */
-export const travel = (a: Box, b: Box): number =>
-  Math.max(
-    Math.abs(a.x - b.x),
-    Math.abs(a.y - b.y),
-    Math.abs(a.x + a.width - b.x - b.width),
-    Math.abs(a.y + a.height - b.y - b.height),
-  )
-
-export const lerpBox = (a: Box, b: Box, t: number): Box => ({
-  x: lerp(a.x, b.x, t),
-  y: lerp(a.y, b.y, t),
-  width: lerp(a.width, b.width, t),
-  height: lerp(a.height, b.height, t),
-})
-
-export const sized = (b: Box): boolean => b.width > 0 && b.height > 0
-
-export const inView = (b: Box, width: number, height: number): boolean =>
-  sized(b) && b.x < width && b.y < height && b.x + b.width > 0 && b.y + b.height > 0
-
-export const boxOf = (b: Box): Box => ({ x: b.x, y: b.y, width: b.width, height: b.height })
-
-/** Pins the copy to `pose` instead of following its element. */
-export function hold(copy: Copy, pose: Pose): void {
-  copy.box = boxOf(pose)
-  copy.radius = pose.radius
-  copy.opacity = pose.opacity
-  copy.clip = pose.clip
-}
-
-export const poseOf = (copy: Copy): Pose | undefined =>
-  copy.box
-    ? {
-        ...copy.box,
-        radius: copy.radius ?? copy.drawn?.radius ?? 0,
-        opacity: copy.opacity,
-        clip: copy.clip,
-      }
-    : copy.drawn
-
-/** Largest corner radius in px, the way effects draws it. */
-export function radiusOf(el: Element, box: Box): number {
-  const style = getComputedStyle(el)
-  let radius = 0
-  for (const r of [
-    style.borderTopLeftRadius,
-    style.borderTopRightRadius,
-    style.borderBottomRightRadius,
-    style.borderBottomLeftRadius,
-  ]) {
-    const value = Number.parseFloat(r || '0') || 0
-    radius = Math.max(
-      radius,
-      r?.endsWith('%') ? (Math.min(box.width, box.height) * value) / 100 : value,
-    )
-  }
-  return radius
-}
-
-/** Nearest clipping ancestor (overflow or inset clip-path), found the same way effects does. */
-export function frameOf(el: Element): Element | undefined {
-  const { body } = el.ownerDocument
-  for (let node = el.parentElement; node && node !== body; node = node.parentElement) {
-    const s = getComputedStyle(node)
-    const overflow =
-      (s.overflowX && s.overflowX !== 'visible') || (s.overflowY && s.overflowY !== 'visible')
-    if (overflow || s.clipPath?.startsWith('inset(')) return node
-  }
-  return undefined
-}
+import type { Flight, FlightState, Presence } from './types'
 
 /** Site writes (GSAP) wake a frame and count as activity. */
 export interface Owner {
@@ -177,6 +57,10 @@ export class FlightImpl implements Flight {
   startAt = 0
   /** Last live box of the target, kept while it is lost. */
   targetBox: Box | undefined
+  /** `targetBox` comes from the pose the target's own effects give it (`copy.posed`). */
+  posed = false
+  /** The target was drawable in an earlier frame, so its effects have run and posed it. */
+  warm = false
   /** In-place fade: seconds done, length, and the alpha it starts from. */
   fadeTime = 0
   fadeSpan = 0
@@ -229,50 +113,49 @@ export class FlightImpl implements Flight {
   }
 }
 
-// Ends on the target's framing if both show the same picture, else on its own object-fit there.
-export function flightCrop(f: FlightImpl, to: Box, box: Box, t: number): Crop | undefined {
-  const c = f.copy
-  if (f.cropPose !== f.pose) {
-    f.cropPose = f.pose
-    f.crop = c.crop ?? c.cropAt(f.pose)
+/**
+ * The crop of the flying copy at `box`, `t` of the way to `to`. It ends on the target's framing if
+ * both show the same picture, else on the copy's own object-fit there.
+ */
+export function flightCrop(flight: FlightImpl, to: Box, box: Box, t: number): Crop | undefined {
+  const { copy } = flight
+  if (flight.cropPose !== flight.pose) {
+    flight.cropPose = flight.pose
+    flight.crop = copy.crop ?? copy.cropAt(flight.pose)
   }
-  const own = c.cropAt(to)
-  if (!f.crop || !own) return undefined
-  const target = f.target && f.target !== c ? f.target.cropAt(to) : undefined
+  const own = copy.cropAt(to)
+  if (!flight.crop || !own) return undefined
+  const target = flight.target && flight.target !== copy ? flight.target.cropAt(to) : undefined
   const end = target && alike(target, to, own, to) ? target : own
-  return framing(f.crop, f.pose, end, to, box, t)
-}
-
-/** Moves a copy outside a flight. A framing set by the owner keeps its zoom and centre. */
-export function place(c: Copy, box: Box): void {
-  if (c.crop && c.box) c.crop = framing(c.crop, c.box, c.crop, c.box, box, 0)
-  c.box = box
+  return framing(flight.crop, flight.pose, end, to, box, t)
 }
 
 /** Current pose of the flying copy, at the alpha the pair covers. */
-export function here(f: FlightImpl): Pose {
-  const pose = poseOf(f.copy)
-  return pose ? { ...pose, opacity: f.cover } : f.pose
+export function here(flight: FlightImpl): Pose {
+  const pose = poseOf(flight.copy)
+  return pose ? { ...pose, opacity: flight.cover } : flight.pose
 }
 
-// The flying copy at `(1 - share) * cover` over `under` in the same pose adds up to exactly
-// `cover`, with `under` making up `share` of it. No dip or flash at any share.
-export function show(f: FlightImpl, under: Copy | undefined): void {
-  const c = f.copy
-  const { share, cover } = f
-  c.opacity = (1 - share) * cover
-  c.veil = share >= 1
+/**
+ * Draws the flying copy at `(1 - share) * cover` and `under` beneath it in the same pose, so the
+ * two add up to exactly `cover` with `under` making up `share` of it. No dip or flash at any share.
+ */
+export function show(flight: FlightImpl, under: Copy | undefined): void {
+  const { copy, share, cover } = flight
+  copy.opacity = (1 - share) * cover
+  copy.veil = share >= 1
   if (!under) return
-  under.box = c.box
-  const own = c.crop && c.box ? under.cropAt(c.box) : undefined
-  under.crop = own && c.crop && c.box && alike(own, c.box, c.crop, c.box) ? c.crop : undefined
-  under.clip = c.clip
-  under.radius = c.radius
-  under.above = c.above - 1
+  under.box = copy.box
+  const own = copy.crop && copy.box ? under.cropAt(copy.box) : undefined
+  const sameFraming = own && copy.crop && copy.box && alike(own, copy.box, copy.crop, copy.box)
+  under.crop = sameFraming ? copy.crop : undefined
+  under.clip = copy.clip
+  under.radius = copy.radius
+  under.above = copy.above - 1
   under.veil = false
   // A router re-render may remove its node mid-flight. Let it fade out as a ghost then.
   under.leave = 'ghost'
-  const rest = 1 - c.opacity
+  const rest = 1 - copy.opacity
   under.opacity = share > 0 && rest > 0 ? clamp((share * cover) / rest) : 0
 }
 
@@ -280,7 +163,7 @@ export function show(f: FlightImpl, under: Copy | undefined): void {
 export class PresenceImpl implements Presence {
   readonly element: Element
   readonly copy: Copy
-  // Opacity under reduced motion, since custom effects may animate on u.presence.
+  /** Opacity under reduced motion, since custom effects may animate on `u.presence`. */
   readonly prop: 'presence' | 'opacity'
   readonly scale: number
   readonly #owner: Owner

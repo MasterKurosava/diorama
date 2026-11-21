@@ -1,4 +1,7 @@
-import type { Off } from '@diorama/core'
+// Preloads: `assets.preload` from code, and `data-dio-preload` markup that loads on intent
+// (hover, focus or touch). Only the latest preload of each kind holds its leases.
+import type { Off } from '@dioramajs/core'
+import { withDocs } from '@dioramajs/core/dev'
 import { DEV, isAbort, noop } from './errors'
 import { absolute, keyOf, srcset } from './keys'
 import { bitmap, loaded } from './loaders'
@@ -238,7 +241,10 @@ export class Preloads {
     const found = this.#host.typeOf(href)
     // A page address. Router integrations pass the fetched Document instead.
     if (!found)
-      return `ASSET_TYPE: ${href} has no asset type: preload takes asset URLs or a Document`
+      return withDocs(
+        `ASSET_TYPE: ${href} has no asset type: preload takes asset URLs or a Document`,
+        'ASSET_TYPE',
+      )
     // Images preload their pixels, since `texture` and the effects pool share the `image` entry.
     // Only images key by CORS mode. Models load like a `load()` without `crossOrigin`.
     const type = found === 'texture' ? 'image' : found

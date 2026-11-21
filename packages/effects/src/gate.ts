@@ -1,44 +1,34 @@
-import { isDioramaError, type PluginEntry, type Signal, signal } from '@diorama/core'
-import type { RenderApi } from '@diorama/render'
+// The engine gate. Decides once per app whether effects may run at all (Save-Data, WebGPU or
+// WebGL 2 present), then downloads and starts the engine when an element comes near, after the
+// first paint, eagerly or on `load()`. Also tracks nearness with an IntersectionObserver and
+// answers media queries, and prefetches the markup's effects in idle time.
+import { isDioramaError, type PluginEntry, type Signal, signal } from '@dioramajs/core'
+import type { RenderApi } from '@dioramajs/render'
+import { DEV } from './define'
 import { EffectError } from './errors'
-import type { Controller, EnginePort, Runtime, RuntimeHost } from './instances'
+import type { Controller } from './instances'
+import type { EnginePort, Runtime, RuntimeHost } from './ports'
+import { canSlice, slice } from './slice'
 import type { EffectsOptions, EffectsStatus } from './types'
 
 type RuntimeModule = typeof import('./runtime/index')
+type GateResult = 'ok' | 'off' | 'unavailable'
 
-interface Probe {
+/** The navigator features the gate reads. */
+interface NavigatorFeatures {
   connection?: { saveData?: boolean }
-  gpu?: { requestAdapter(): Promise<unknown> }
-}
-const nav = (): Probe => (typeof navigator === 'undefined' ? {} : (navigator as Probe))
-const saveData = (): boolean => nav().connection?.saveData === true
-
-/** Resolves after the first paint, so the engine does not compete with critical loads. */
-const painted = (): Promise<void> =>
-  new Promise((resolve) => {
-    const frames = (): void => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', frames, { once: true })
-    } else frames()
-  })
-
-/** WebGPURenderer falls back to WebGL 2, so either backend is enough. */
-async function probe(): Promise<'ok' | 'off' | 'unavailable'> {
-  if (saveData()) return 'off'
-  const gl = document.createElement('canvas').getContext('webgl2')
-  if (gl) {
-    gl.getExtension('WEBGL_lose_context')?.loseContext()
-    return 'ok'
-  }
-  const gpu = nav().gpu
-  if (!gpu) return 'unavailable'
-  const adapter = await gpu.requestAdapter().catch(() => null)
-  return adapter ? 'ok' : 'unavailable'
+  gpu?: { requestAdapter(options?: { featureLevel?: string }): Promise<unknown> }
 }
 
-/** Nearness, the engine boot, the GPU gate, media queries and prefetch. */
+/** Longest wait for a WebGPU adapter before WebGL 2 is asked instead, ms. */
+const ADAPTER_WAIT = 1000
+/** Rejected engine imports after which the app stops trying until `load()`. */
+const MAX_BOOT_FAILURES = 2
+
+const features = (): NavigatorFeatures =>
+  typeof navigator === 'undefined' ? {} : (navigator as NavigatorFeatures)
+const saveData = (): boolean => features().connection?.saveData === true
+
 export class Engine implements EnginePort {
   readonly status: Signal<EffectsStatus> = signal<EffectsStatus>('idle')
   readonly intersections: Signal<number> = signal(0)
@@ -48,16 +38,17 @@ export class Engine implements EnginePort {
   loading = false
   /** Plugins that started after `effects` (extend, postfx from a panel). */
   readonly plugins: Set<string> = new Set()
-  readonly #ctl: Controller
+  readonly #controller: Controller
   readonly #options: EffectsOptions
   readonly #host: RuntimeHost
-  readonly #io: IntersectionObserver | undefined
+  readonly #observer: IntersectionObserver | undefined
   readonly #near = new WeakSet<Element>()
   readonly #reported = new WeakSet<Element>()
   readonly #queries = new Map<string, MediaQueryList>()
   #boot: Promise<Runtime | undefined> | undefined
-  #gate: Promise<'ok' | 'off' | 'unavailable'> | undefined
+  #gate: Promise<boolean> | undefined
   #module: Promise<RuntimeModule> | undefined
+  #three: Promise<unknown> | undefined
   #painted: Promise<void> | undefined
   #failures = 0
   /** Someone else stopped `render`. Don't fight the site for it. */
@@ -65,19 +56,19 @@ export class Engine implements EnginePort {
   #requested = false
   #lost = false
 
-  constructor(ctl: Controller, options: EffectsOptions, host: RuntimeHost) {
-    this.#ctl = ctl
+  constructor(controller: Controller, options: EffectsOptions, host: RuntimeHost) {
+    this.#controller = controller
     this.#options = options
     this.#host = host
     if (typeof IntersectionObserver === 'function') {
-      this.#io = new IntersectionObserver((entries) => this.#intersect(entries), {
+      this.#observer = new IntersectionObserver((entries) => this.#intersect(entries), {
         rootMargin: options.margin,
       })
     }
   }
 
   start(): void {
-    const { app } = this.#ctl
+    const { app } = this.#controller
     app.on('app:start', () => {
       if (this.#options.load === 'eager') void this.load()
     })
@@ -95,44 +86,33 @@ export class Engine implements EnginePort {
   }
 
   destroy(): void {
-    this.#io?.disconnect()
+    this.#observer?.disconnect()
     this.runtime?.dispose()
     this.runtime = undefined
   }
 
-  #intersect(entries: IntersectionObserverEntry[]): void {
-    for (const e of entries) {
-      this.#reported.add(e.target)
-      if (e.isIntersecting) this.#near.add(e.target)
-      else this.#near.delete(e.target)
-    }
-    for (const e of entries) {
-      if (e.isIntersecting) for (const rec of this.#ctl.of(e.target)) this.#ctl.advance(rec)
-    }
-    this.intersections.value++
+  near(element: Element): boolean {
+    return !this.#observer || this.#near.has(element)
   }
 
-  near(el: Element): boolean {
-    return !this.#io || this.#near.has(el)
-  }
-
-  reported(el: Element): boolean {
-    return !this.#io || this.#reported.has(el)
+  reported(element: Element): boolean {
+    return !this.#observer || this.#reported.has(element)
   }
 
   /** A posed layer loads its waiting instances without waiting for the observer. */
-  force(el: Element): void {
-    this.#near.add(el)
-    for (const rec of this.#ctl.of(el)) this.#ctl.advance(rec)
+  force(element: Element): void {
+    this.#near.add(element)
+    for (const record of this.#controller.of(element)) this.#controller.advance(record)
   }
 
-  watch(el: Element, on: boolean): void {
-    if (on) this.#io?.observe(el)
-    else {
-      this.#io?.unobserve(el)
-      this.#near.delete(el)
-      this.#reported.delete(el)
+  watch(element: Element, on: boolean): void {
+    if (on) {
+      this.#observer?.observe(element)
+      return
     }
+    this.#observer?.unobserve(element)
+    this.#near.delete(element)
+    this.#reported.delete(element)
   }
 
   matches(query: string): boolean {
@@ -141,18 +121,18 @@ export class Engine implements EnginePort {
     if (!list) {
       list = matchMedia(query)
       this.#queries.set(query, list)
-      const signal = this.#ctl.app.abortSignal
-      list.addEventListener('change', () => this.#ctl.refresh(), { signal })
+      const signal = this.#controller.app.abortSignal
+      list.addEventListener('change', () => this.#controller.refresh(), { signal })
     }
     return list.matches
   }
 
   reducedMotion(): boolean {
-    return this.#ctl.app.stage.reducedMotion.peek()
+    return this.#controller.app.stage.reducedMotion.peek()
   }
 
   canBoot(): boolean {
-    if (this.blocked || this.#external || this.#failures >= 2) return false
+    if (this.blocked || this.#external || this.#failures >= MAX_BOOT_FAILURES) return false
     return this.#options.load !== 'manual' || this.#requested || this.loading || !!this.runtime
   }
 
@@ -162,7 +142,7 @@ export class Engine implements EnginePort {
     else if (this.#options.load === 'near') {
       this.#painted ??= painted()
       void this.#painted.then(() => {
-        if (!this.#ctl.app.abortSignal.aborted) void this.boot()
+        if (!this.#controller.app.abortSignal.aborted) void this.boot()
       })
     }
   }
@@ -173,48 +153,109 @@ export class Engine implements EnginePort {
     return this.boot().then((runtime) => runtime !== undefined)
   }
 
-  fetch(): void {
-    if (this.runtime || this.#boot || !this.canBoot()) return
-    void this.#gated().then((gate) => {
-      if (gate === 'ok' && !this.#ctl.app.abortSignal.aborted) void this.#import()
+  /** Downloads the engine and these definitions once the gate is open. Starts nothing. */
+  fetch(names: readonly string[]): Promise<unknown> {
+    return this.#gated().then(async (open) => {
+      const { app, registry } = this.#controller
+      if (!open || app.abortSignal.aborted) return
+      // Lazy entries first: what their maps turn off downloads neither module nor engine.
+      await Promise.all(names.map((name) => registry.resolve(name)))
+      if (app.abortSignal.aborted) return
+      const wanted = names.filter(
+        (name) => !registry.entries.get(name)?.failed && !this.#controller.skips(name),
+      )
+      if (!wanted.length) return
+      void this.#import()
+      return Promise.all(wanted.map((name) => registry.load(name)))
     })
   }
 
-  /** Probed once per app. */
-  #gated(): Promise<'ok' | 'off' | 'unavailable'> {
-    const { enabled } = this.#options
-    this.#gate ??= enabled === 'auto' ? probe() : Promise.resolve(enabled ? 'ok' : 'off')
+  /**
+   * Where tasks can be sliced, three's core and TSL evaluate in a task of their own before the
+   * engine and the effect modules, which import them too: otherwise all of three evaluates with
+   * the first module that arrives, one long task. Undefined where nothing waits.
+   */
+  three(): Promise<unknown> | undefined {
+    if (!canSlice()) return undefined
+    this.#three ??= import('three/tsl').then(slice)
+    // A failed import is reported by the module that needs it.
+    return this.#three.catch(() => {})
+  }
+
+  boot(): Promise<Runtime | undefined> {
+    if (this.runtime) return Promise.resolve(this.runtime)
+    if (this.blocked || this.#failures >= MAX_BOOT_FAILURES) return Promise.resolve(undefined)
+    this.#boot ??= this.#start()
+    return this.#boot
+  }
+
+  /** Device lost or render disabled. Everything becomes `unavailable`. */
+  lost(): void {
+    if (!this.runtime) return
+    if (!this.#lost) {
+      this.#lost = true
+      const error = new EffectError('RENDER_LOST', 'the GPU device was lost')
+      this.#controller.app.report(error, 'engine')
+    }
+    this.blocked = 'unavailable'
+    this.#controller.refresh()
+    this.runtime.dispose()
+    this.runtime = undefined
+    this.#controller.dom.adopt(false)
+    this.status.value = 'unavailable'
+  }
+
+  #intersect(entries: IntersectionObserverEntry[]): void {
+    for (const entry of entries) {
+      this.#reported.add(entry.target)
+      if (entry.isIntersecting) this.#near.add(entry.target)
+      else this.#near.delete(entry.target)
+    }
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue
+      for (const record of this.#controller.of(entry.target)) this.#controller.advance(record)
+    }
+    this.intersections.value++
+  }
+
+  /**
+   * Probed once per app, before any effect module or the engine downloads. A refusal blocks
+   * every instance.
+   */
+  #gated(): Promise<boolean> {
+    if (!this.#gate) {
+      const { enabled, render } = this.#options
+      const rendering = Boolean(this.#controller.app.find('render'))
+      this.#gate = probeGpu(enabled, rendering, render.forceWebGL === true).then((result) => {
+        if (result !== 'ok' && !this.#controller.app.abortSignal.aborted) this.#block(result, true)
+        return result === 'ok'
+      })
+    }
     return this.#gate
   }
 
   /** Downloaded once. A rejection is handled where it is awaited. */
   #import(): Promise<RuntimeModule> {
     if (!this.#module) {
-      this.#module = import('./runtime/index')
+      const three = this.three()
+      this.#module = three ? three.then(() => import('./runtime/index')) : import('./runtime/index')
       this.#module.catch(() => {})
     }
     return this.#module
   }
 
-  boot(): Promise<Runtime | undefined> {
-    if (this.runtime) return Promise.resolve(this.runtime)
-    if (this.blocked || this.#failures >= 2) return Promise.resolve(undefined)
-    this.#boot ??= this.#start()
-    return this.#boot
-  }
-
-  /** Runs once per app. Every await is followed by an abort check. */
+  /**
+   * The boot: gate, engine download, render, `extend` plugins, runtime. Each step runs in its own
+   * task where tasks can be sliced. Runs once per app; every await is followed by an abort check.
+   */
   async #start(): Promise<Runtime | undefined> {
-    const { app } = this.#ctl
+    const { app } = this.#controller
     const signal = app.abortSignal
-    const options = this.#options
     // Always awaited: `boot()` must store this promise before anything below re-enters it.
-    const gate = await this.#gated()
-    if (signal.aborted) return undefined
-    if (gate !== 'ok') return this.#block(gate, true)
+    if (!(await this.#gated()) || signal.aborted) return undefined
     this.loading = true
     this.status.value = 'loading'
-    this.#ctl.refresh()
+    this.#controller.refresh()
     let module: RuntimeModule
     try {
       module = await this.#import()
@@ -228,7 +269,10 @@ export class Engine implements EnginePort {
       app.report(new EffectError('EFFECT_LOAD', 'the engine failed to load', { cause }), 'engine')
       return undefined
     }
+    // The engine evaluated in the previous task.
+    await slice()
     if (signal.aborted) return undefined
+    const options = this.#options
     try {
       const found = app.find('render')
       if (found && Object.keys(options.render).length) {
@@ -238,12 +282,13 @@ export class Engine implements EnginePort {
       this.render = found ?? (await app.use(module.render(options.render)))
     } catch {
       // The kernel already reported the failed setup.
-      return signal.aborted ? undefined : this.#block('unavailable', false)
+      if (!signal.aborted) this.#block('unavailable', false)
+      return undefined
     }
+    // The `extend` plugins, each in its own transaction so a failing one does not undo render.
     for (const extend of options.extend) {
       if (signal.aborted) return undefined
       try {
-        // Own transaction, so a failing postfx does not roll back render.
         await app.use([await extend()].flat() as PluginEntry[])
       } catch (error) {
         if (!signal.aborted && !isDioramaError(error, 'PLUGIN_SETUP')) {
@@ -251,68 +296,55 @@ export class Engine implements EnginePort {
         }
       }
     }
+    // Render's setup ended in the previous task.
+    await slice()
     if (signal.aborted) return undefined
     this.runtime = module.start(app, this.#host)
     this.loading = false
-    this.#ctl.dom.adopt(true)
+    this.#controller.dom.adopt(true)
     this.status.value = 'ready'
-    this.#ctl.refresh()
+    this.#controller.refresh()
     return this.runtime
   }
 
-  #block(kind: 'off' | 'unavailable', report: boolean): undefined {
+  #block(kind: 'off' | 'unavailable', probed: boolean): void {
     this.blocked = kind
     this.loading = false
     this.status.value = kind
-    if (report && kind === 'unavailable') {
+    // No GPU is expected on some visitors' browsers, not an error: a dev warning, silent in
+    // production. Sites follow `status` and `data-dio-state`.
+    if (DEV && probed && kind === 'unavailable') {
       const error = new EffectError('RENDER_UNAVAILABLE', 'neither WebGPU nor WebGL 2 is available')
-      this.#ctl.app.report(error, 'engine')
+      this.#controller.warn('unavailable', error)
     }
-    this.#ctl.refresh()
-    return undefined
+    this.#controller.refresh()
   }
 
   /** `render` was stopped from outside. Instances wait and the page is plain again. */
   #stop(): void {
-    this.#ctl.orphan()
+    this.#controller.orphan()
     this.runtime?.dispose()
     this.runtime = undefined
     this.render = undefined
     this.#boot = undefined
     this.#external = true
-    this.#ctl.dom.adopt(false)
+    this.#controller.dom.adopt(false)
     this.status.value = 'idle'
-  }
-
-  /** Device lost or render disabled. Everything becomes `unavailable`. */
-  lost(): void {
-    if (!this.runtime) return
-    if (!this.#lost) {
-      this.#lost = true
-      this.#ctl.app.report(new EffectError('RENDER_LOST', 'the GPU device was lost'), 'engine')
-    }
-    this.blocked = 'unavailable'
-    this.#ctl.refresh()
-    this.runtime.dispose()
-    this.runtime = undefined
-    this.#ctl.dom.adopt(false)
-    this.status.value = 'unavailable'
   }
 
   /** Downloads (not starts) the engine and the markup's effects in idle time. */
   #prefetch(): void {
     if (!this.#options.prefetch || saveData() || this.#options.enabled === false) return
-    const { app } = this.#ctl
+    const { app } = this.#controller
     const fetch = (): void => {
       if (app.abortSignal.aborted || this.blocked) return
-      const { live, registry } = this.#ctl
-      // Off instances and unknown names load neither module.
+      const { live, registry } = this.#controller
+      // Off instances and unknown names load neither module, and nothing loads past a closed gate.
       const waiting = [...live].filter(
-        (r) => r.markup && r.status === 'waiting' && registry.entries.has(r.name),
+        (record) =>
+          record.markup && record.status === 'waiting' && registry.entries.has(record.name),
       )
-      if (!waiting.length) return
-      void this.#import()
-      for (const name of new Set(waiting.map((r) => r.name))) void registry.load(name)
+      if (waiting.length) void this.fetch(waiting.map((record) => record.name))
     }
     const idle = (): void => {
       if (typeof requestIdleCallback === 'function') requestIdleCallback(fetch)
@@ -321,4 +353,57 @@ export class Engine implements EnginePort {
     if (document.readyState === 'complete') idle()
     else window.addEventListener('load', idle, { once: true, signal: app.abortSignal })
   }
+}
+
+/** Resolves after the first paint, so the engine does not compete with critical loads. */
+function painted(): Promise<void> {
+  return new Promise((resolve) => {
+    const twoFrames = (): void => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', twoFrames, { once: true })
+    } else twoFrames()
+  })
+}
+
+/**
+ * WebGPURenderer falls back to WebGL 2, so either backend is enough; `forceWebGL` needs WebGL 2.
+ * `true` skips only the Save-Data rule: without a GPU the page stays plain, as with 'auto'. A DOM
+ * without either API (a server or test DOM) cannot be asked and is trusted with `true`.
+ */
+async function probeGpu(
+  enabled: boolean | 'auto',
+  rendering: boolean,
+  webgl: boolean,
+): Promise<GateResult> {
+  if (!enabled) return 'off'
+  if (enabled === 'auto' && saveData()) return 'off'
+  // A running render has its context already.
+  if (rendering) return 'ok'
+  const gpu = features().gpu
+  if (enabled === true && !gpu && typeof WebGL2RenderingContext === 'undefined') return 'ok'
+  // WebGPU first: an adapter request does not block the page, while a WebGL context does with
+  // synchronous GPU calls (over 100 ms at startup on a 4x slower CPU).
+  if (gpu && !webgl && (await hasAdapter(gpu))) return 'ok'
+  await slice()
+  const gl = document.createElement('canvas').getContext('webgl2')
+  if (!gl) return 'unavailable'
+  gl.getExtension('WEBGL_lose_context')?.loseContext()
+  return 'ok'
+}
+
+/** Whether the browser gives a WebGPU adapter, asked as three asks; no answer in time is no. */
+function hasAdapter(gpu: NonNullable<NavigatorFeatures['gpu']>): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<boolean>((resolve) => {
+    timer = setTimeout(resolve, ADAPTER_WAIT, false)
+  })
+  const answer = Promise.resolve()
+    .then(() => gpu.requestAdapter({ featureLevel: 'compatibility' }))
+    .then(
+      (found) => found != null,
+      () => false,
+    )
+  return Promise.race([answer, late]).finally(() => clearTimeout(timer))
 }

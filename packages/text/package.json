@@ -1,0 +1,235 @@
+{
+  "name": "@dioramajs/text",
+  "version": "0.1.0",
+  "description": "Text effects for Diorama: 3D type, fire, neon, melt, shatter, text reveal and more.",
+  "keywords": [
+    "diorama",
+    "three",
+    "threejs",
+    "webgpu",
+    "webgl",
+    "tsl",
+    "text",
+    "typography",
+    "3d-text"
+  ],
+  "homepage": "https://dioramajs.dev",
+  "bugs": "https://github.com/MasterKurosava/diorama/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasterKurosava/diorama.git",
+    "directory": "packages/text"
+  },
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@dioramajs/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./intro": {
+      "@dioramajs/source": "./src/intro.ts",
+      "types": "./dist/intro.d.ts",
+      "default": "./dist/intro.js"
+    },
+    "./text-reveal": {
+      "@dioramajs/source": "./src/text-reveal.ts",
+      "types": "./dist/text-reveal.d.ts",
+      "default": "./dist/text-reveal.js"
+    },
+    "./scramble": {
+      "@dioramajs/source": "./src/scramble.ts",
+      "types": "./dist/scramble.d.ts",
+      "default": "./dist/scramble.js"
+    },
+    "./marquee": {
+      "@dioramajs/source": "./src/marquee.ts",
+      "types": "./dist/marquee.d.ts",
+      "default": "./dist/marquee.js"
+    },
+    "./video-text": {
+      "@dioramajs/source": "./src/video-text.ts",
+      "types": "./dist/video-text.d.ts",
+      "default": "./dist/video-text.js"
+    },
+    "./wave": {
+      "@dioramajs/source": "./src/wave.ts",
+      "types": "./dist/wave.d.ts",
+      "default": "./dist/wave.js"
+    },
+    "./split-flap": {
+      "@dioramajs/source": "./src/split-flap.ts",
+      "types": "./dist/split-flap.d.ts",
+      "default": "./dist/split-flap.js"
+    },
+    "./counter": {
+      "@dioramajs/source": "./src/counter.ts",
+      "types": "./dist/counter.d.ts",
+      "default": "./dist/counter.js"
+    },
+    "./magnet": {
+      "@dioramajs/source": "./src/magnet.ts",
+      "types": "./dist/magnet.d.ts",
+      "default": "./dist/magnet.js"
+    },
+    "./text-glitch": {
+      "@dioramajs/source": "./src/text-glitch.ts",
+      "types": "./dist/text-glitch.d.ts",
+      "default": "./dist/text-glitch.js"
+    },
+    "./neon": {
+      "@dioramajs/source": "./src/neon.ts",
+      "types": "./dist/neon.d.ts",
+      "default": "./dist/neon.js"
+    },
+    "./assemble": {
+      "@dioramajs/source": "./src/assemble.ts",
+      "types": "./dist/assemble.d.ts",
+      "default": "./dist/assemble.js"
+    },
+    "./dust": {
+      "@dioramajs/source": "./src/dust.ts",
+      "types": "./dist/dust.d.ts",
+      "default": "./dist/dust.js"
+    },
+    "./extrude": {
+      "@dioramajs/source": "./src/extrude.ts",
+      "types": "./dist/extrude.d.ts",
+      "default": "./dist/extrude.js"
+    },
+    "./shimmer": {
+      "@dioramajs/source": "./src/shimmer.ts",
+      "types": "./dist/shimmer.d.ts",
+      "default": "./dist/shimmer.js"
+    },
+    "./inflate": {
+      "@dioramajs/source": "./src/inflate.ts",
+      "types": "./dist/inflate.d.ts",
+      "default": "./dist/inflate.js"
+    },
+    "./rotator": {
+      "@dioramajs/source": "./src/rotator.ts",
+      "types": "./dist/rotator.d.ts",
+      "default": "./dist/rotator.js"
+    },
+    "./orbit": {
+      "@dioramajs/source": "./src/orbit.ts",
+      "types": "./dist/orbit.d.ts",
+      "default": "./dist/orbit.js"
+    },
+    "./ribbon": {
+      "@dioramajs/source": "./src/ribbon.ts",
+      "types": "./dist/ribbon.d.ts",
+      "default": "./dist/ribbon.js"
+    },
+    "./tunnel": {
+      "@dioramajs/source": "./src/tunnel.ts",
+      "types": "./dist/tunnel.d.ts",
+      "default": "./dist/tunnel.js"
+    },
+    "./voxel": {
+      "@dioramajs/source": "./src/voxel.ts",
+      "types": "./dist/voxel.d.ts",
+      "default": "./dist/voxel.js"
+    },
+    "./shatter": {
+      "@dioramajs/source": "./src/shatter.ts",
+      "types": "./dist/shatter.d.ts",
+      "default": "./dist/shatter.js"
+    },
+    "./emboss": {
+      "@dioramajs/source": "./src/emboss.ts",
+      "types": "./dist/emboss.d.ts",
+      "default": "./dist/emboss.js"
+    },
+    "./pins": {
+      "@dioramajs/source": "./src/pins.ts",
+      "types": "./dist/pins.d.ts",
+      "default": "./dist/pins.js"
+    },
+    "./melt": {
+      "@dioramajs/source": "./src/melt.ts",
+      "types": "./dist/melt.d.ts",
+      "default": "./dist/melt.js"
+    },
+    "./unfold": {
+      "@dioramajs/source": "./src/unfold.ts",
+      "types": "./dist/unfold.d.ts",
+      "default": "./dist/unfold.js"
+    },
+    "./blinds": {
+      "@dioramajs/source": "./src/blinds.ts",
+      "types": "./dist/blinds.d.ts",
+      "default": "./dist/blinds.js"
+    },
+    "./keycaps": {
+      "@dioramajs/source": "./src/keycaps.ts",
+      "types": "./dist/keycaps.d.ts",
+      "default": "./dist/keycaps.js"
+    },
+    "./lens": {
+      "@dioramajs/source": "./src/lens.ts",
+      "types": "./dist/lens.d.ts",
+      "default": "./dist/lens.js"
+    },
+    "./fire": {
+      "@dioramajs/source": "./src/fire.ts",
+      "types": "./dist/fire.d.ts",
+      "default": "./dist/fire.js"
+    },
+    "./water": {
+      "@dioramajs/source": "./src/water.ts",
+      "types": "./dist/water.d.ts",
+      "default": "./dist/water.js"
+    },
+    "./prism": {
+      "@dioramajs/source": "./src/prism.ts",
+      "types": "./dist/prism.d.ts",
+      "default": "./dist/prism.js"
+    },
+    "./physics": {
+      "@dioramajs/source": "./src/physics.ts",
+      "types": "./dist/physics.d.ts",
+      "default": "./dist/physics.js"
+    },
+    "./smoke": {
+      "@dioramajs/source": "./src/smoke.ts",
+      "types": "./dist/smoke.d.ts",
+      "default": "./dist/smoke.js"
+    },
+    "./hologram": {
+      "@dioramajs/source": "./src/hologram.ts",
+      "types": "./dist/hologram.d.ts",
+      "default": "./dist/hologram.js"
+    },
+    "./meta.json": "./meta.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "meta.json"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc"
+  },
+  "peerDependencies": {
+    "@dioramajs/effects": "workspace:^",
+    "@dioramajs/render": "workspace:^",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@dioramajs/effects": "workspace:*",
+    "@dioramajs/render": "workspace:*",
+    "@types/three": "^0.187.0",
+    "three": "^0.187.0",
+    "tsdown": "0.23.4",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

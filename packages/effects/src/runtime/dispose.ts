@@ -1,3 +1,4 @@
+// Disposal of the objects an effect placed, sparing resources shared with the runtime.
 import type { Material, Object3D } from 'three/webgpu'
 
 interface Resource {
@@ -30,21 +31,23 @@ export function deepDispose(
 ): void {
   const object = root as Object3D & Drawable
   object.dispose()
-  const own = !shared && root.userData.keep !== true
-  if (own) {
-    const spare = (r: Resource): boolean => keep(r) || r.userData?.keep === true
+  const freeResources = !shared && root.userData.keep !== true
+  if (freeResources) {
+    const spare = (resource: Resource): boolean =>
+      keep(resource) || resource.userData?.keep === true
     const { geometry, material, isSprite } = object
     object.skeleton?.dispose()
     if (geometry && !isSprite && !spare(geometry)) geometry.dispose()
-    for (const m of [material ?? []].flat()) {
-      if (spare(m)) continue
-      for (const value of Object.values(m)) {
+    for (const used of [material ?? []].flat()) {
+      if (spare(used)) continue
+      for (const value of Object.values(used)) {
         const texture = value as TextureLike | null
-        if (texture?.isTexture && !texture.isRenderTargetTexture && !spare(texture))
+        if (texture?.isTexture && !texture.isRenderTargetTexture && !spare(texture)) {
           texture.dispose()
+        }
       }
-      m.dispose()
+      used.dispose()
     }
   }
-  for (const child of root.children) deepDispose(child, keep, !own)
+  for (const child of root.children) deepDispose(child, keep, !freeResources)
 }

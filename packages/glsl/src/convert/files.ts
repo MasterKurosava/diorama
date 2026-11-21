@@ -11,8 +11,8 @@ export function sibling(file: string): string | undefined {
     '.fs': '.vs',
     '.vs': '.fs',
   }
-  const m = /\.(frag|vert|fs|vs)$/.exec(file)
-  return m ? file.slice(0, -m[0].length) + pairs[m[0]] : undefined
+  const match = /\.(frag|vert|fs|vs)$/.exec(file)
+  return match ? file.slice(0, -match[0].length) + pairs[match[0]] : undefined
 }
 /** Resolves bare `#include` specifiers up front because `convert` reads includes synchronously. */
 export async function collectIncludes(
@@ -23,8 +23,8 @@ export async function collectIncludes(
   const found = new Map<string, { path: string; code: string }>()
   const visit = async (from: string, text: string, depth: number): Promise<void> => {
     if (depth > 32) return
-    for (const m of text.matchAll(/^\s*#\s*include\s+(?:"([^"]+)"|([^\s;"<>]+))/gm)) {
-      const spec = (m[1] ?? m[2]) as string
+    for (const match of text.matchAll(/^\s*#\s*include\s+(?:"([^"]+)"|([^\s;"<>]+))/gm)) {
+      const spec = (match[1] ?? match[2]) as string
       const key = `${from}\0${spec}`
       if (found.has(key)) continue
       let hit = readInclude(spec, from)

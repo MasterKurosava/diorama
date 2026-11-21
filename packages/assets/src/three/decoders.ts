@@ -1,11 +1,11 @@
-import type { Off } from '@diorama/core'
-import type { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
-import type { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
+import type { Off } from '@dioramajs/core'
+import type { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
+import type { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js'
 import type { WebGPURenderer } from 'three/webgpu'
 import { AssetError, isAbort } from '../errors'
 import type { DecoderOptions, LoaderContext } from '../types'
 
-type Meshopt = typeof import('three/examples/jsm/libs/meshopt_decoder.module.js').MeshoptDecoder
+type Meshopt = typeof import('three/addons/libs/meshopt_decoder.module.js').MeshoptDecoder
 type Options = Readonly<Partial<DecoderOptions>>
 
 const DRACO = 'KHR_draco_mesh_compression'
@@ -117,7 +117,7 @@ export function dracoLoader(options: Options, url: string): Promise<DRACOLoader>
   if (!draco) {
     const pending = (async () => {
       const [{ DRACOLoader, DRACO_GLTF_CONFIG }] = await Promise.all([
-        import('three/examples/jsm/loaders/DRACOLoader.js'),
+        import('three/addons/loaders/DRACOLoader.js'),
         workers(),
       ])
       const loader = new DRACOLoader().setDecoderPath(path ?? DRACO_GLTF_CONFIG)
@@ -141,7 +141,7 @@ export function meshoptDecoder(options: Options, url: string): Promise<Meshopt> 
     return Promise.reject(refused('meshopt compression', 'meshopt', url))
   if (!meshopt) {
     const pending = (async () => {
-      const { MeshoptDecoder } = await import('three/examples/jsm/libs/meshopt_decoder.module.js')
+      const { MeshoptDecoder } = await import('three/addons/libs/meshopt_decoder.module.js')
       if (!MeshoptDecoder.supported) {
         throw new AssetError('ASSET_DECODER', 'meshopt decoding needs WebAssembly', { url })
       }
@@ -170,7 +170,7 @@ export function ktx2Loader(renderer: object, options: Options, url: string): Pro
   if (!pending) {
     const created = (async () => {
       const [{ KTX2Loader }] = await Promise.all([
-        import('three/examples/jsm/loaders/KTX2Loader.js'),
+        import('three/addons/loaders/KTX2Loader.js'),
         workers(),
       ])
       const loader = new KTX2Loader()
