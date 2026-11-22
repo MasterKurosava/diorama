@@ -59,6 +59,7 @@ export const particles: EffectEntries = {
       speed: 1,
       trail: 0.6,
       dry: 8,
+      lifetime: 0,
       merge: true,
       x: 0.5,
       y: 0.5,

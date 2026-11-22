@@ -920,6 +920,17 @@
         "unit": "s"
       },
       {
+        "name": "lifetime",
+        "attribute": "data-dio-lifetime",
+        "type": "number",
+        "default": 0,
+        "live": true,
+        "preload": true,
+        "description": "Seconds a drop lasts at most, running or at rest, fading out over the last third of them; 0 lets drops dry or run off on their own.",
+        "range": [0, 30],
+        "unit": "s"
+      },
+      {
         "name": "merge",
         "attribute": "data-dio-merge",
         "type": "boolean",

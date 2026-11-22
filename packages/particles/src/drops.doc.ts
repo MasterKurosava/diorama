@@ -48,6 +48,12 @@ const doc: EffectDoc<typeof drops> = {
       range: [0.5, 20],
       unit: 's',
     },
+    lifetime: {
+      description:
+        'Seconds a drop lasts at most, running or at rest, fading out over the last third of them; 0 lets drops dry or run off on their own.',
+      range: [0, 30],
+      unit: 's',
+    },
     merge: { description: 'Drops that touch run together into one bigger drop.' },
     x: {
       description: 'Thaw: where it starts, from the left edge of the area.',

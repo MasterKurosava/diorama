@@ -63,6 +63,7 @@ type Params = {
   speed: number
   trail: number
   dry: number
+  lifetime: number
   merge: boolean
   x: number
   y: number
@@ -88,6 +89,8 @@ const EDGE = 80
 const REST = 0.5
 /** Seconds a drop takes to fade out; a drop that stops running or growing has at least this. */
 export const FADE = 1
+/** With a lifetime, a drop fades out over this last share of it, at least {@link FADE}. */
+const LAST = 1 / 3
 /** A runner keeps running until it shrinks below this share of the slide radius. */
 const KEEP = 0.62
 /** Share of the meltwater drops that gather enough water to run. */
@@ -108,6 +111,8 @@ export interface Drop {
   hold: number
   /** Seconds left to dry, for drops at rest. */
   life: number
+  /** Seconds since it appeared; a bead counts from its drop's. */
+  age: number
   /** Seconds it still gathers water, and how fast its radius grows meanwhile, px/s. */
   fed: number
   grow: number
@@ -128,6 +133,8 @@ export interface Weather {
   readonly speed: number
   readonly trail: number
   readonly dry: number
+  /** Seconds a drop lasts at most, running or not; 0 or absent for no limit. */
+  readonly lifetime?: number
   readonly merge: boolean
 }
 
@@ -196,6 +203,7 @@ export class Glass {
       lean: (random() - 0.5) * 0.25,
       hold: random() * 0.6,
       life: weather.dry * REST * (0.6 + 0.8 * random()),
+      age: 0,
       fed: 0,
       grow: 0,
       running: false,
@@ -255,6 +263,7 @@ export class Glass {
     const slide = SLIDE * weather.scale
     for (let i = 0; i < drops.length; i++) {
       const drop = drops[i] as Drop
+      drop.age += dt
       if (drop.fed > 0) {
         drop.fed -= dt
         drop.r += drop.grow * dt
@@ -289,17 +298,23 @@ export class Glass {
       if (random() < moved * 0.012) {
         const bead = drop.r * (0.1 + 0.12 * random())
         drop.r = Math.sqrt(Math.max(0, drop.r * drop.r - bead * bead))
-        this.#leaveBead(drop.x - drop.lean * drop.r, drop.y - drop.r * 1.3, bead, weather)
+        this.#leaveBead(drop, bead, weather)
       }
       if (Math.hypot(drop.x - drop.mx, drop.y - drop.my) >= PIECE * weather.scale) {
         this.#layTrail(drop, weather)
       }
       if (weather.merge) this.#swallow(i)
     }
-    // Gone: dried, slid off the area, or used up.
+    // Gone: dried, slid off the area, used up, or past its lifetime.
+    const lifetime = weather.lifetime ?? 0
     for (let i = drops.length - 1; i >= 0; i--) {
       const drop = drops[i] as Drop
-      if (drop.life <= 0 || drop.r < 0.5 || drop.y - drop.r > weather.height + 4) {
+      if (
+        drop.life <= 0 ||
+        drop.r < 0.5 ||
+        drop.y - drop.r > weather.height + 4 ||
+        (lifetime > 0 && drop.age >= lifetime)
+      ) {
         drops.splice(i, 1)
       }
     }
@@ -363,12 +378,15 @@ export class Glass {
     drop.life = Math.max(drop.life, drop.fed + Math.max(FADE, weather.dry * REST * random()))
   }
 
-  /** A small bead left behind by a running drop. */
-  #leaveBead(x: number, y: number, r: number, weather: Weather): void {
+  /** A small bead left behind by a running drop, as old as the drop. */
+  #leaveBead(from: Drop, r: number, weather: Weather): void {
     if (r < 0.6 || this.drops.length >= this.pool) return
+    const x = from.x - from.lean * from.r
+    const y = from.y - from.r * 1.3
     const drop = this.add(x, y, r, { ...weather, merge: false })
     if (drop) {
       drop.hold = 0
+      drop.age = from.age
       // Beads in a trail are thin and go first.
       drop.life = weather.dry * REST * (0.3 + 0.4 * this.#random())
     }
@@ -383,7 +401,8 @@ export class Glass {
       trails[offset + 1] = drop.my
       trails[offset + 2] = drop.x
       trails[offset + 3] = drop.y
-      trails[offset + 4] = drop.r * 0.42
+      // A drop near the end of its lifetime leaves as faint a trail as it is.
+      trails[offset + 4] = drop.r * 0.42 * ending(drop, weather.lifetime ?? 0)
       trails[offset + 5] = this.time
       this.head = (this.head + 1) % TRAILS
       this.laid = Math.min(TRAILS, this.laid + 1)
@@ -478,6 +497,7 @@ const drops: Effect<Params> = defineEffect({
     speed: 1,
     trail: 0.6,
     dry: 8,
+    lifetime: 0,
     merge: true,
     x: 0.5,
     y: 0.5,
@@ -650,6 +670,7 @@ const drops: Effect<Params> = defineEffect({
       speed: Math.max(params.speed, 0),
       trail: params.trail,
       dry: Math.max(params.dry, 0.1),
+      lifetime: Math.max(params.lifetime, 0),
       merge: params.merge,
     })
     return (input: EffectInput) => {
@@ -682,7 +703,7 @@ const drops: Effect<Params> = defineEffect({
       const raining = params.motion === 'rain' && params.trigger === 'view'
       state = glass.step(input.delta, weather, raining ? Math.max(params.rate, 0) : 0)
       now.value = glass.time
-      copyToBuffers(glass, dropData, shapeData, segData, wetData)
+      copyToBuffers(glass, weather.lifetime ?? 0, dropData, shapeData, segData, wetData)
       dropGeometry.instanceCount = glass.drops.length
       trailGeometry.instanceCount = glass.laid
       for (const geometry of [dropGeometry, trailGeometry])
@@ -726,14 +747,25 @@ function instancedQuads(
   return geometry
 }
 
-/** How much of a drop shows: whole while it runs or grows, then fading over its last {@link FADE}. */
-export function opacity(drop: Drop): number {
-  return drop.running || drop.fed > 0 ? 1 : Math.min(1, Math.max(0, drop.life) / FADE)
+/**
+ * How much of a drop shows: whole while it runs or grows, then fading over its last
+ * {@link FADE}; with a `lifetime`, also fading over its last third of it, running or not.
+ */
+export function opacity(drop: Drop, lifetime = 0): number {
+  const drying = drop.running || drop.fed > 0 ? 1 : Math.min(1, Math.max(0, drop.life) / FADE)
+  return Math.min(drying, ending(drop, lifetime))
+}
+
+/** 1 until the last part of a drop's `lifetime`, then down to 0 when it is over; 1 without one. */
+function ending(drop: Drop, lifetime: number): number {
+  if (lifetime <= 0) return 1
+  return Math.min(1, Math.max(0, (lifetime - drop.age) / Math.max(FADE, lifetime * LAST)))
 }
 
 /** Copies the glass into the instance buffers. */
 function copyToBuffers(
   glass: Glass,
+  lifetime: number,
   drop: Float32Array,
   shape: Float32Array,
   seg: Float32Array,
@@ -743,7 +775,7 @@ function copyToBuffers(
     drop[i * 4] = d.x
     drop[i * 4 + 1] = d.y
     drop[i * 4 + 2] = d.r
-    drop[i * 4 + 3] = opacity(d)
+    drop[i * 4 + 3] = opacity(d, lifetime)
     // The tail stretches with the slide speed.
     shape[i * 2] = d.vy > 0 ? Math.min(1.4, d.vy / 260) : 0
     shape[i * 2 + 1] = d.seed
