@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/assets",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Asset loading for Diorama: cache, preload and progress; glTF with Draco, Meshopt and KTX2.",
   "keywords": [
     "diorama",

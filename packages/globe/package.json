@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/globe",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Interactive globe with markers and arcs for Diorama.",
   "keywords": [
     "diorama",

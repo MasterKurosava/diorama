@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/audio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Audio-reactive effects for Diorama: visualizer and beat.",
   "keywords": [
     "diorama",

@@ -2,6 +2,13 @@
 
 All packages share one version.
 
+## 0.1.1
+
+- The site package is `@dioramajs/diorama`: `npm i @dioramajs/diorama three`. Its command line stays `npx dioramajs`.
+- `drops`: `lifetime`, the seconds a drop lasts at most, running or at rest, fading out over the last third of them.
+- `frost`: a pane with no ice ignores the pointer, so moving it over bare glass draws nothing; a thaw down to bare glass clears what was wiped.
+- READMEs on npm point at the new package name.
+
 ## 0.1.0
 
 The first public release.

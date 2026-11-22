@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/backgrounds",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shader backgrounds for Diorama: gradient, blobs, clouds, stars, grid, waves and dots.",
   "keywords": [
     "diorama",
