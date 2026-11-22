@@ -4,10 +4,10 @@ Adaptive quality for Diorama: a tier per device from its GPU, lowered when frame
 
 ## Install
 
-Sites install `dioramajs`, which loads this package when an element needs it:
+Sites install `@dioramajs/diorama`, which loads this package when an element needs it:
 
 ```bash
-npm install dioramajs three
+npm install @dioramajs/diorama three
 ```
 
 ## Docs

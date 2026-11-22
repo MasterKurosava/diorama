@@ -206,6 +206,8 @@ const frost: Effect<Params> = defineEffect({
       passive = false,
     ): void => target.addEventListener(type, handler as EventListener, { signal, passive })
     const push = (point: { x: number; y: number; r?: number } | null): void => {
+      // Bare glass has nothing to wipe: a pane without ice ignores the pointer and draws nothing.
+      if (pane && freeze.grow === 0) return
       if (queue.length >= QUEUE) queue.splice(0, queue.length - QUEUE + 1)
       queue.push(point)
       ctx.invalidate()
@@ -352,6 +354,12 @@ const frost: Effect<Params> = defineEffect({
             box.set(x, y, rect.width / 2 + PAD, rect.height / 2 + PAD)
           }
         })
+      }
+      // A thaw that left bare glass takes its wipes with it, or they would fog back over nothing.
+      if (pane && freeze.grow === 0 && wipe.peak > 0) {
+        wipe.reset()
+        wipe.write(data)
+        map.needsUpdate = true
       }
       state.grown = grown
       state.seen = seen

@@ -475,8 +475,8 @@ export function paramsType(params: { readonly [name: string]: unknown } | undefi
     if (Array.isArray(v)) return `readonly [${v.map(() => 'number').join(', ')}]`
     const kind = (v as { '~kind'?: string })['~kind']
     if (kind === 'choice')
-      return `import('dioramajs').ChoiceParam<${(v as { values: string[] }).values.map(quoted).join(' | ')}>`
-    return "import('dioramajs').ColorParam"
+      return `import('@dioramajs/diorama').ChoiceParam<${(v as { values: string[] }).values.map(quoted).join(' | ')}>`
+    return "import('@dioramajs/diorama').ColorParam"
   }
   const key = (k: string): string => (IDENT.test(k) ? k : quoted(k))
   return `{ ${entries.map(([k, v]) => `${key(k)}: ${type(v)}`).join('; ')} }`

@@ -1,4 +1,4 @@
-// diorama/nuxt, used as `modules: ['dioramajs/nuxt']` in nuxt.config. Nuxt builds with Vite, so
+// diorama/nuxt, used as `modules: ['@dioramajs/diorama/nuxt']` in nuxt.config. Nuxt builds with Vite, so
 // this adds the Vite plugin with the folder under srcDir (app/effects in Nuxt 4). Call `start()`
 // in a client plugin (plugins/diorama.client.ts).
 import { join } from 'node:path'

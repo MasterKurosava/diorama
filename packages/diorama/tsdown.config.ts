@@ -24,7 +24,7 @@ export default defineConfig([
     platform: 'neutral',
     target: 'es2022',
     // The slot stays an import: a build plugin points it at the site's effects folder.
-    external: ['dioramajs/generated'],
+    external: ['@dioramajs/diorama/generated'],
     dts: { sourcemap: true },
     sourcemap: true,
     // A relative glob: `true` becomes an absolute one, which matches nothing under "folder (2)".
@@ -56,7 +56,7 @@ export default defineConfig([
     platform: 'browser',
     target: 'es2022',
     noExternal: [/.*/],
-    alias: { 'dioramajs/generated': resolve(import.meta.dirname, 'src/generated.ts') },
+    alias: { '@dioramajs/diorama/generated': resolve(import.meta.dirname, 'src/generated.ts') },
     minify: true,
     dts: false,
     // Chunk names change with every build: a chunk of an earlier build must not ship
@@ -72,7 +72,7 @@ export default defineConfig([
     target: 'es2022',
     noExternal: [/^(?!three(\/|$))/],
     external: [/^three(\/|$)/],
-    alias: { 'dioramajs/generated': resolve(import.meta.dirname, 'src/generated.ts') },
+    alias: { '@dioramajs/diorama/generated': resolve(import.meta.dirname, 'src/generated.ts') },
     minify: true,
     dts: false,
     clean: ['dist/esm'],

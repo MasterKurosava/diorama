@@ -14,7 +14,7 @@ import { dirname, relative, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { add } from './add'
 import { entry } from './meta'
-import { SITE } from './names'
+import { BIN } from './names'
 import { nextModule } from './next'
 import { effectsDir, posix, specifier } from './paths'
 import { braces, declarations, type Found, key, quote, scan } from './vite'
@@ -31,9 +31,9 @@ export interface CliRun {
   close(): void
 }
 
-const USAGE = `${SITE} gen [--dir src/effects] [--out src/diorama.gen.d.ts | src/diorama.gen.ts | fx/registry.js]
+const USAGE = `${BIN} gen [--dir src/effects] [--out src/diorama.gen.d.ts | src/diorama.gen.ts | fx/registry.js]
             [--check] [--watch]
-${SITE} add <effect>... [--as <name>] [--force] [--dir src/effects]`
+${BIN} add <effect>... [--as <name>] [--force] [--dir src/effects]`
 
 const JS = /\.m?js$/
 

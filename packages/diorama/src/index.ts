@@ -1,9 +1,10 @@
 // The site entry. One call starts effects with the whole catalogue, quality tiers, transitions
 // and assets.
-// Effects from the folder come through `dioramajs/generated`, which the build plugin fills in.
+// Effects from the folder come through `@dioramajs/diorama/generated`, which the build plugin fills in.
 import { assets } from '@dioramajs/assets'
 import { type App, createApp, type LogCode, type PluginEntry, stage } from '@dioramajs/core'
 import { DEV, withDocs } from '@dioramajs/core/dev'
+import { effects as found } from '@dioramajs/diorama/generated'
 import {
   type Effect,
   type EffectEntries,
@@ -18,7 +19,6 @@ import type { QualityOptions, QualityTier } from '@dioramajs/quality'
 import type { RenderOptions } from '@dioramajs/render'
 import { type TransitionsOptions, transitions } from '@dioramajs/transitions'
 import type { CoverName, CoverOptions } from '@dioramajs/transitions/cover'
-import { effects as found } from 'dioramajs/generated'
 import { adopt, deferAttach, guard } from './attach'
 import { catalog } from './catalog'
 
@@ -169,7 +169,7 @@ function overrides(app: App, list: EffectEntries, extra: StartOptions['effects']
  * Starts Diorama on the page and returns the app at once. It finishes starting in the
  * background. A second call returns the same app, so a re-run module doesn't make another.
  *
- *     import { start } from 'dioramajs'
+ *     import { start } from '@dioramajs/diorama'
  *     export const app = start()
  */
 export function start(options: StartOptions = {}): App {

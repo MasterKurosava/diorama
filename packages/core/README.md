@@ -4,10 +4,10 @@ The core of Diorama: the app, plugins, signals, the frame loop, the stage, scrol
 
 ## Install
 
-Sites install `dioramajs`, which loads this package when an element needs it:
+Sites install `@dioramajs/diorama`, which loads this package when an element needs it:
 
 ```bash
-npm install dioramajs three
+npm install @dioramajs/diorama three
 ```
 
 ## Docs

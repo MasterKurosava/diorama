@@ -4,10 +4,10 @@ Asset loading for Diorama: one cache with preload and progress, and glTF with Dr
 
 ## Install
 
-Sites install `dioramajs`, which loads this package when an element needs it:
+Sites install `@dioramajs/diorama`, which loads this package when an element needs it:
 
 ```bash
-npm install dioramajs three
+npm install @dioramajs/diorama three
 ```
 
 ## Docs

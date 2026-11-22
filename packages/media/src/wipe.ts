@@ -97,6 +97,13 @@ export class Wipe {
     this.active = active
   }
 
+  /** Fogs every cell at once. */
+  reset(): void {
+    this.clear.fill(0)
+    this.peak = 0
+    this.active = false
+  }
+
   /** A copy of this mask at `size` cells a side, nearest cell. */
   resized(size: number): Wipe {
     if (size === this.size) return this

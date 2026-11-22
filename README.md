@@ -84,14 +84,14 @@ Elements with the same `data-dio-key` fly from one page to the next when the sit
 ## Install
 
 ```bash
-npm install dioramajs three
+npm install @dioramajs/diorama three
 ```
 
 Add the plugin. It turns every file in `src/effects/` into an effect and writes their types.
 
 ```ts
 // vite.config.ts
-import { diorama } from 'dioramajs/vite'
+import { diorama } from '@dioramajs/diorama/vite'
 
 export default { plugins: [diorama()] }
 ```
@@ -100,7 +100,7 @@ Start the app once, in the module every page loads:
 
 ```ts
 // src/main.ts
-import { start } from 'dioramajs'
+import { start } from '@dioramajs/diorama'
 
 export const app = start()
 ```
@@ -112,7 +112,7 @@ Then put `data-dio` on an element. That's the whole setup.
 
 ```js
 // astro.config.mjs
-import diorama from 'dioramajs/astro'
+import diorama from '@dioramajs/diorama/astro'
 
 export default { integrations: [diorama()] }
 ```
@@ -120,7 +120,7 @@ export default { integrations: [diorama()] }
 ```astro
 <!-- src/layouts/Layout.astro -->
 <script>
-  import { start } from 'dioramajs'
+  import { start } from '@dioramajs/diorama'
   start()
 </script>
 ```
@@ -134,12 +134,12 @@ With `<ClientRouter />`, keyed elements fly between pages with no extra code.
 
 ```ts
 // nuxt.config.ts
-export default defineNuxtConfig({ modules: ['dioramajs/nuxt'] })
+export default defineNuxtConfig({ modules: ['@dioramajs/diorama/nuxt'] })
 ```
 
 ```ts
 // app/plugins/diorama.client.ts
-import { start } from 'dioramajs'
+import { start } from '@dioramajs/diorama'
 
 export default defineNuxtPlugin(() => {
   start()
@@ -155,7 +155,7 @@ Effects go in `app/effects/`.
 
 ```ts
 // next.config.ts
-import { withDiorama } from 'dioramajs/next'
+import { withDiorama } from '@dioramajs/diorama/next'
 
 export default withDiorama({})
 ```
@@ -163,7 +163,7 @@ export default withDiorama({})
 ```tsx
 // app/diorama.tsx
 'use client'
-import { start } from 'dioramajs'
+import { start } from '@dioramajs/diorama'
 import { useEffect } from 'react'
 
 export function Diorama() {
@@ -180,7 +180,7 @@ Render `<Diorama />` once in the root layout. `withDiorama` writes the effect re
 <summary>No build step (Webflow, Tilda, plain HTML)</summary>
 
 ```html
-<script type="module" src="https://cdn.jsdelivr.net/npm/dioramajs/dist/cdn/auto.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@dioramajs/diorama/dist/cdn/auto.js"></script>
 
 <img src="/photo.jpg" alt="" data-dio="ripple" />
 ```
@@ -195,7 +195,7 @@ An effect is a file. Its name is the file name, its params come from the default
 
 ```ts
 // src/effects/brighten.ts
-import { effect } from 'dioramajs'
+import { effect } from '@dioramajs/diorama'
 
 export default effect({ strength: 1 }, ({ surface, u }) => {
   surface.color((color) => color.mul(u.strength.add(1)))
@@ -241,11 +241,11 @@ The tutorial [Your own effect in 10 minutes](https://dioramajs.dev/docs/learn/ef
 
 ## Packages
 
-Most sites need only `dioramajs`. It loads the rest on demand.
+Most sites need only `@dioramajs/diorama`. It loads the rest on demand.
 
 | Package                                          | Contents                                                                                      |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [`dioramajs`](packages/diorama)                  | `start()`, `effect()`, the Vite, Astro, Nuxt and Next.js integrations, the CDN build, the CLI |
+| [`@dioramajs/diorama`](packages/diorama)         | `start()`, `effect()`, the Vite, Astro, Nuxt and Next.js integrations, the CDN build, the CLI |
 | [`@dioramajs/core`](packages/core)               | App, plugins, signals, frame loop, stage, scroll and pointer                                  |
 | [`@dioramajs/render`](packages/render)           | WebGPU renderer with the WebGL 2 fallback                                                     |
 | [`@dioramajs/effects`](packages/effects)         | Effects on DOM elements, their runtime and the `kit` of helpers                               |

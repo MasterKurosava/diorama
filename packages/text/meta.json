@@ -168,7 +168,7 @@
       },
       {
         "title": "Typed letter by letter",
-        "html": "<p class=\"prompt\" data-dio=\"text-reveal\" data-dio-motion=\"type\" data-dio-stagger=\"0.05\">npm install dioramajs</p>"
+        "html": "<p class=\"prompt\" data-dio=\"text-reveal\" data-dio-motion=\"type\" data-dio-stagger=\"0.05\">npm install @dioramajs/diorama</p>"
       },
       {
         "title": "From code",

@@ -4,10 +4,10 @@ GSAP and ScrollTrigger for Diorama: tweens and the canvas share one ticker, and 
 
 ## Install
 
-Sites install `dioramajs`, which loads this package when an element needs it:
+Sites install `@dioramajs/diorama`, which loads this package when an element needs it:
 
 ```bash
-npm install dioramajs three
+npm install @dioramajs/diorama three
 ```
 
 ## Docs

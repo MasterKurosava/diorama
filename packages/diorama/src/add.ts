@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, extname, join, relative, resolve } from 'node:path'
-import { SCOPE, SITE, SOURCE } from './names'
+import { BIN, SCOPE, SITE, SOURCE } from './names'
 import { bare, posix, specifier } from './paths'
 import { CODE, effectName, SHADER } from './vite'
 
@@ -292,7 +292,7 @@ export function copy(effect: BuiltIn, as: string = effect.name): Copy {
   main = documentParams(mergeImports(main), effect.params)
   if (as !== effect.name) main = rename(main, effect.name, as)
   const version = site.version ? ` ${site.version}` : ''
-  main = `// The built-in \`${effect.name}\` effect of ${SITE}${version}, copied by \`${SITE} add\`: yours to edit.\n${main}`
+  main = `// The built-in \`${effect.name}\` effect of ${SITE}${version}, copied by \`${BIN} add\`: yours to edit.\n${main}`
   if (builtIns().has(as) && !/^export const override\b/m.test(main)) {
     main += `\n// Replaces the built-in \`${as}\` on purpose: no EFFECT_OVERRIDE warning.\nexport const override = true\n`
   }

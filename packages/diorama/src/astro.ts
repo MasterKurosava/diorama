@@ -156,7 +156,7 @@ export function diorama(options: DioramaAstroOptions = {}): AstroIntegrationLike
           'page',
           [
             lenisOptions && "import Lenis from 'lenis'",
-            `import { ${names.filter(Boolean).join(', ')} } from 'dioramajs/astro/client'`,
+            `import { ${names.filter(Boolean).join(', ')} } from '@dioramajs/diorama/astro/client'`,
             restore && `restoreScroll('${restoreScroll}')`,
             lenisOptions && `smoothScroll(Lenis, ${JSON.stringify(lenisOptions)})`,
           ]

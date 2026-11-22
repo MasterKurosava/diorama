@@ -8,10 +8,10 @@ Effects for cards and buttons in Diorama.
 
 ## Install
 
-Sites install `dioramajs`, which loads this package when an element needs it:
+Sites install `@dioramajs/diorama`, which loads this package when an element needs it:
 
 ```bash
-npm install dioramajs three
+npm install @dioramajs/diorama three
 ```
 
 ## Docs

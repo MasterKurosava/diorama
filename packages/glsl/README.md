@@ -13,7 +13,7 @@ npm install -D @dioramajs/glsl
 ```ts
 // vite.config.ts
 import { glsl } from '@dioramajs/glsl/vite'
-import { diorama } from 'dioramajs/vite'
+import { diorama } from '@dioramajs/diorama/vite'
 
 export default { plugins: [diorama(), glsl()] }
 ```

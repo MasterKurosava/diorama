@@ -1,5 +1,5 @@
 {
-  "name": "dioramajs",
+  "name": "@dioramajs/diorama",
   "version": "0.1.0",
   "description": "three.js effects for plain HTML: one data-dio attribute, WebGPU with a WebGL 2 fallback, 100 ready-made effects and page transitions.",
   "keywords": [

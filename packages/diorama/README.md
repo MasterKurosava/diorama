@@ -1,4 +1,4 @@
-# dioramajs
+# @dioramajs/diorama
 
 three.js effects for plain HTML. One attribute on any element.
 
@@ -11,27 +11,27 @@ The image becomes a WebGL plane that keeps its place in the layout while the pag
 ## Install
 
 ```bash
-npm install dioramajs three
+npm install @dioramajs/diorama three
 ```
 
 ```ts
 // vite.config.ts
-import { diorama } from 'dioramajs/vite'
+import { diorama } from '@dioramajs/diorama/vite'
 
 export default { plugins: [diorama()] }
 ```
 
 ```ts
 // src/main.ts
-import { start } from 'dioramajs'
+import { start } from '@dioramajs/diorama'
 
 export const app = start()
 ```
 
-Astro, Nuxt and Next.js have their own integrations (`dioramajs/astro`, `dioramajs/nuxt`, `dioramajs/next`), and a page without a build step needs one script tag:
+Astro, Nuxt and Next.js have their own integrations (`@dioramajs/diorama/astro`, `@dioramajs/diorama/nuxt`, `@dioramajs/diorama/next`), and a page without a build step needs one script tag:
 
 ```html
-<script type="module" src="https://cdn.jsdelivr.net/npm/dioramajs/dist/cdn/auto.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@dioramajs/diorama/dist/cdn/auto.js"></script>
 ```
 
 ## Your own effects
@@ -40,7 +40,7 @@ Every file in `src/effects/` is an effect named after the file:
 
 ```ts
 // src/effects/brighten.ts
-import { effect } from 'dioramajs'
+import { effect } from '@dioramajs/diorama'
 
 export default effect({ strength: 1 }, ({ surface, u }) => {
   surface.color((color) => color.mul(u.strength.add(1)))

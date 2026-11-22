@@ -44,7 +44,7 @@ const lenisClass = (name: string): boolean => name === 'lenis' || name.startsWit
  * top, the hash, the position Back restores) and its classes on <html>.
  *
  *     import Lenis from 'lenis'
- *     import { smoothScroll } from 'dioramajs/astro/client'
+ *     import { smoothScroll } from '@dioramajs/diorama/astro/client'
  *
  *     const lenis = smoothScroll(Lenis, { easing: (t) => 1 - (1 - t) ** 3, duration: 1.2 })
  */
@@ -241,7 +241,7 @@ const GESTURES = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const
  * Astro restores the position the page was left at. The first call decides; it returns a
  * function that turns it off.
  *
- *     import { restoreScroll } from 'dioramajs/astro/client'
+ *     import { restoreScroll } from '@dioramajs/diorama/astro/client'
  *
  *     restoreScroll('parents')
  */

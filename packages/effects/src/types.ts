@@ -686,7 +686,7 @@ export interface EffectEntry {
    */
   readonly intro?: boolean | ((element: Element) => boolean)
   /**
-   * The entry replaces a built-in effect of `dioramajs` on purpose, so `start()` does not warn
+   * The entry replaces a built-in effect of `@dioramajs/diorama` on purpose, so `start()` does not warn
    * `EFFECT_OVERRIDE` in development. The registry ignores it.
    */
   readonly override?: boolean
