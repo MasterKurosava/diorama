@@ -2,6 +2,10 @@
 
 All packages share one version.
 
+## 0.1.3
+
+- The viewport width is measured again when a scrollbar comes or goes without a resize event, such as under a scroll lock, so the scene no longer drifts off the page.
+
 ## 0.1.2
 
 - Phones: copies keep to their elements while the page scrolls. The canvas is as tall as the large viewport (`100lvh`), so it no longer stretches when the browser toolbar slides away, and a pinned sticky stage stops and releases the canvas on the compositor exactly where CSS sticky does.

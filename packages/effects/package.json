@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/effects",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Effects on DOM elements for Diorama: effect(), the runtime and the kit of helpers.",
   "keywords": [
     "diorama",

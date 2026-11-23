@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/render",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "WebGPU renderer with a WebGL 2 fallback for Diorama.",
   "keywords": [
     "diorama",

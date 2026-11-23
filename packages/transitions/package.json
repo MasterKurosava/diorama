@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/transitions",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Page transitions for Diorama: keyed flights between pages and page covers.",
   "keywords": [
     "diorama",

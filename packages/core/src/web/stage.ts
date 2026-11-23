@@ -119,6 +119,15 @@ export const stage: Plugin<'stage', StageOptions> = /*#__PURE__*/ definePlugin({
     measure()
     const listen = { signal: app.abortSignal }
     window.addEventListener('resize', measure, listen)
+    // A scrollbar that comes or goes (a scroll lock, content that grows) changes the width
+    // without a resize event.
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => {
+        if (root.clientWidth !== width.peek()) measure()
+      })
+      observer.observe(root)
+      app.onDispose(() => observer.disconnect())
+    }
 
     const reduceQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)')
     if (reduceQuery) {
