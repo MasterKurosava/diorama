@@ -269,8 +269,6 @@ export class Controller {
       }
       record.sync()
       this.#setStatus(record, 'waiting')
-      // `data-dio-when` can turn an instance on that never loaded.
-      this.#watchAttributes(record.element)
     }
     if (this.#isOff(record)) {
       this.#stop(record, 'off', 'disabled')

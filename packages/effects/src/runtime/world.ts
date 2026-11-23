@@ -53,6 +53,7 @@ import { Pool } from './pool'
 import { Queries } from './queries'
 import { keep, raise } from './raise'
 import { marked, Sections, sectionOf } from './sections'
+import { compareStacking } from './stacking'
 import { compiler, Planes, SurfaceImpl } from './surface'
 
 type MountResult = 'running' | 'failed' | 'aborted' | 'off'
@@ -93,6 +94,8 @@ export class World implements Runtime {
   readonly #belowTier = new Set<InstanceRecord>()
   #order: LayerImpl[] = []
   #sorted = false
+  #paint: LayerImpl[] = []
+  #stacked = false
   #disposed = false
   /** Driver ms of the last page leave or enter. */
   #turned = Number.NEGATIVE_INFINITY
@@ -256,7 +259,7 @@ export class World implements Runtime {
     this.#queries.scanned()
     for (const layer of this.layers.values()) this.#sort(layer)
     // Elements may have moved, and update and pose order follow the document.
-    this.#sorted = false
+    this.reorder()
     this.copies.scanned()
   }
 
@@ -330,7 +333,7 @@ export class World implements Runtime {
       this.layers.delete(layer.element)
       this.copies.drop(layer)
     }
-    this.#sorted = false
+    this.reorder()
     layer.present(undefined)
     layer.lower()
     layer.section = this.sections.swap(layer.section, undefined)
@@ -360,9 +363,35 @@ export class World implements Runtime {
     return this.#order
   }
 
-  /** A layer joined or left, so `ordered()` sorts again. */
+  /**
+   * Layers in the order the browser paints their elements: by stacking context and z-index, then
+   * in document order, ancestors first.
+   */
+  painted(): LayerImpl[] {
+    if (!this.#stacked) {
+      const ordered = this.ordered()
+      const index = new Map(ordered.map((layer, i) => [layer, i]))
+      const tree = (a: LayerImpl, b: LayerImpl): number =>
+        (index.get(a) as number) - (index.get(b) as number)
+      this.#paint = [...ordered].sort((a, b) =>
+        a.element.contains(b.element) || b.element.contains(a.element)
+          ? tree(a, b)
+          : compareStacking(a.stacking, b.stacking) || tree(a, b),
+      )
+      this.#stacked = true
+    }
+    return this.#paint
+  }
+
+  /** A layer joined or left, so `ordered()` and `painted()` sort again. */
   reorder(): void {
     this.#sorted = false
+    this.#stacked = false
+  }
+
+  /** A layer's stacking changed, so `painted()` sorts again. */
+  restack(): void {
+    this.#stacked = false
   }
 
   /** Queues a compile with the layer's objects. Its media is disposed after it. */

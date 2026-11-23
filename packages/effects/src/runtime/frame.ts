@@ -12,6 +12,7 @@ import type { Inst, Phase } from './instance'
 import type { LayerImpl } from './layer'
 import { Presenter } from './present'
 import { marked } from './sections'
+import { sameStacking, stackingOf } from './stacking'
 import { Watcher } from './watch'
 import type { World } from './world'
 
@@ -349,6 +350,11 @@ export class Frame {
       right: box.right + view.scrollX,
       bottom: box.bottom + view.scrollY,
     }
+    const stacking = stackingOf(element)
+    if (!sameStacking(stacking, layer.stacking)) {
+      layer.stacking = stacking
+      this.#world.restack()
+    }
     layer.version = layer.anchor.version
   }
 
@@ -534,7 +540,7 @@ export class Frame {
     const { ghosts } = world.copies
     world.painter?.rank(
       world.orphans.size ? [...ghosts, ...world.orphans] : ghosts,
-      world.ordered(),
+      world.painted(),
     )
     this.#busy = true
   }

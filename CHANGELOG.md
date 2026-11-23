@@ -2,6 +2,10 @@
 
 All packages share one version.
 
+## 0.1.4
+
+- Copies draw in the order the browser paints their elements: an element lifted with `z-index` (or any other stacking context) over a later one draws over its copy too, as the page does. Document order decides only between equals.
+
 ## 0.1.3
 
 - The viewport width is measured again when a scrollbar comes or goes without a resize event, such as under a scroll lock, so the scene no longer drifts off the page.

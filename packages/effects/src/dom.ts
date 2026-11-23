@@ -284,7 +284,11 @@ export class Dom implements DomPort {
   #observe(root: ParentNode): void {
     const node = root as Node
     const options = { childList: true, subtree: true, attributes: true }
-    this.#observer.observe(node, { ...options, attributeFilter: ['data-dio', STATE] })
+    // `data-dio-when` can turn on an instance that never loaded, so it is watched from the start.
+    this.#observer.observe(node, {
+      ...options,
+      attributeFilter: ['data-dio', STATE, 'data-dio-when'],
+    })
     this.#ruleObserver?.observe(node, {
       subtree: true,
       attributes: true,

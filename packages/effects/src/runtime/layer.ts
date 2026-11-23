@@ -18,6 +18,7 @@ import type { CopyImpl } from './copy'
 import { Inputs, type LayerUniform, type Rect, type ToWorld } from './inputs'
 import type { Inst } from './instance'
 import type { Media } from './media'
+import { type Stacking, UNSTACKED } from './stacking'
 import type { SurfaceImpl } from './surface'
 
 type Vec2Node = Node<'vec2'>
@@ -53,6 +54,8 @@ export class LayerImpl implements Layer {
   section: Anchor | undefined
   /** Anchor version whose styles were read. */
   version = -1
+  /** Where the element paints among the page's stacking contexts, read with the styles. */
+  stacking: Stacking = UNSTACKED
   mode: 'live' | 'layout' | 'frame' = 'live'
   /** Box of the clipping ancestor in page px, cached for 'layout' tracking. */
   clip: Rect | undefined

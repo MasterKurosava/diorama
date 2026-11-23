@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/quality",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Adaptive quality tiers for Diorama.",
   "keywords": [
     "diorama",
