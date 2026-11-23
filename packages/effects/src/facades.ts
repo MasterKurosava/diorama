@@ -29,6 +29,8 @@ export function instanceFacade(controller: Controller, record: InstanceRecord): 
       for (const attribute of record.element.getAttributeNames()) {
         const rest = attribute.slice(PREFIX.length)
         if (!attribute.startsWith(PREFIX) || RESERVED_ATTRS.includes(rest)) continue
+        // `data-dio-when` is the element's media query, never a param.
+        if (rest === 'when' || rest === `${addressed}when`) continue
         keys.add(camel(rest.startsWith(addressed) ? rest.slice(addressed.length) : rest))
       }
       return keys

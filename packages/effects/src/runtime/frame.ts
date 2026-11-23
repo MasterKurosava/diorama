@@ -142,7 +142,7 @@ export class Frame {
       scrollX: scroll.state.x,
       scrollY: scroll.state.y,
     }
-    world.sections.measure(view.height)
+    world.sections.measure(view.height, view.scrollY)
     const frame = this.#inputs
     // An fps timer wakes the loop after idle, and a wake frame gets one nominal step.
     frame.delta = this.#timed ? Math.min(time.rawDelta, MAX_STEP) : time.delta

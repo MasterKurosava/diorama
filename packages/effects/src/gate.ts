@@ -7,7 +7,7 @@ import type { RenderApi } from '@dioramajs/render'
 import { DEV } from './define'
 import { EffectError } from './errors'
 import type { Controller } from './instances'
-import type { EnginePort, Runtime, RuntimeHost } from './ports'
+import type { EnginePort, InstanceRecord, Runtime, RuntimeHost } from './ports'
 import { canSlice, slice } from './slice'
 import type { EffectsOptions, EffectsStatus } from './types'
 
@@ -153,16 +153,19 @@ export class Engine implements EnginePort {
     return this.boot().then((runtime) => runtime !== undefined)
   }
 
-  /** Downloads the engine and these definitions once the gate is open. Starts nothing. */
-  fetch(names: readonly string[]): Promise<unknown> {
+  /** Downloads the engine and the definitions of these instances once the gate is open. Starts nothing. */
+  fetch(records: readonly InstanceRecord[]): Promise<unknown> {
     return this.#gated().then(async (open) => {
       const { app, registry } = this.#controller
       if (!open || app.abortSignal.aborted) return
+      const names = new Set(records.map((record) => record.name))
       // Lazy entries first: what their maps turn off downloads neither module nor engine.
-      await Promise.all(names.map((name) => registry.resolve(name)))
+      await Promise.all([...names].map((name) => registry.resolve(name)))
       if (app.abortSignal.aborted) return
-      const wanted = names.filter(
-        (name) => !registry.entries.get(name)?.failed && !this.#controller.skips(name),
+      // Per instance, since an element's own `when` may keep on what the entry turns off.
+      const on = records.filter((record) => !this.#controller.skips(record.name, undefined, record))
+      const wanted = [...new Set(on.map((record) => record.name))].filter(
+        (name) => !registry.entries.get(name)?.failed,
       )
       if (!wanted.length) return
       void this.#import()
@@ -344,7 +347,7 @@ export class Engine implements EnginePort {
         (record) =>
           record.markup && record.status === 'waiting' && registry.entries.has(record.name),
       )
-      if (waiting.length) void this.fetch(waiting.map((record) => record.name))
+      if (waiting.length) void this.fetch(waiting)
     }
     const idle = (): void => {
       if (typeof requestIdleCallback === 'function') requestIdleCallback(fetch)

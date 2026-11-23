@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/glsl",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "GLSL to three.js TSL converter: Vite plugin, webpack loader and CLI.",
   "keywords": [
     "diorama",

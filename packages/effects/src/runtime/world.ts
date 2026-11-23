@@ -118,7 +118,7 @@ export class World implements Runtime {
     this.#frame = new Frame(this)
     scope.onDispose(view.stage.reducedMotion.subscribe(() => this.invalidate()))
     // A pinned stage stands still on screen: the canvas must not ride the scroll ahead of frames.
-    scope.onDispose(view.stage.hold(() => this.sections.pinned))
+    scope.onDispose(view.stage.pin(() => this.sections.spans))
     this.#watchDevice()
     this.#watchPages()
     const quality = view.find('quality' as never) as

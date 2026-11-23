@@ -367,7 +367,9 @@ export class Dom implements DomPort {
         }
         // The runtime re-reads the track mode with the styles of a re-measured layer.
         else if (name === 'data-dio-track') controller.app.anchors.refresh()
-        else params = true
+        else if (name.endsWith('-when') && isWhen(controller, element, name)) {
+          for (const record of controller.of(element)) controller.update(record)
+        } else params = true
       }
       if (params) controller.attributeChanged(element)
     }
@@ -423,6 +425,14 @@ export class Dom implements DomPort {
 }
 
 /** `data-dio-state` from the statuses of an element's records, if they set one. */
+/** `data-dio-when`, or the addressed form for one of the element's effects. */
+function isWhen(controller: Controller, element: Element, name: string): boolean {
+  if (name === 'data-dio-when') return true
+  for (const record of controller.of(element))
+    if (name === `data-dio-${record.name}-when`) return true
+  return false
+}
+
 function stateOf(statuses: readonly InstanceStatus[]): string | undefined {
   if (statuses.includes('loading')) return 'loading'
   if (statuses.every((status) => status === 'failed')) return 'failed'

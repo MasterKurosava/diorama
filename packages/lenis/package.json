@@ -1,6 +1,6 @@
 {
   "name": "@dioramajs/lenis",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Lenis smooth scroll integration for Diorama.",
   "keywords": [
     "diorama",

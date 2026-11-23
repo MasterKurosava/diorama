@@ -32,7 +32,7 @@ export {
   type ScrollState,
   scroll,
 } from './web/scroll'
-export { type StageApi, type StageOptions, stage } from './web/stage'
+export { type ScrollSpan, type StageApi, type StageOptions, stage } from './web/stage'
 export { type VisibilityApi, type VisibilityOptions, visibility } from './web/visibility'
 
 /** Built-in web layer, in start order. Disable one with `disable`, or all with `defaults: false`. */

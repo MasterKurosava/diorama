@@ -215,7 +215,7 @@ export interface EnginePort {
    * Downloads the engine and these definitions once the gate is open, without starting
    * `render`. A closed gate blocks every instance and downloads nothing.
    */
-  fetch(names: readonly string[]): Promise<unknown>
+  fetch(records: readonly InstanceRecord[]): Promise<unknown>
   near(element: Element): boolean
   /** The observer has reported the element since it was last watched. */
   reported(element: Element): boolean

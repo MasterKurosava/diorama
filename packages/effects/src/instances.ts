@@ -225,17 +225,32 @@ export class Controller {
     return track
   }
 
-  /** Off by name: disabled, or the entry's (else the definition's) reducedMotion or when. */
+  /**
+   * Off by name: disabled, or the entry's (else the definition's) reducedMotion or when. With a
+   * record, its element's `data-dio-when` and its handles' `when` come before the entry's.
+   */
   skips(
     name: string,
     effect: Effect | undefined = this.registry.entries.get(name)?.effect,
+    record?: InstanceRecord,
   ): boolean {
     if (this.#disabled.has(name)) return true
     const def = effect?.['~definition']
     const motion = this.registry.reducedMotion(name) ?? def?.reducedMotion
     if (motion === 'off' && this.engine.reducedMotion()) return true
-    const when = this.registry.when(name) ?? mediaQuery(def?.when)
+    const when =
+      (record && this.#ownWhen(record)) ?? this.registry.when(name) ?? mediaQuery(def?.when)
     return when !== undefined && !this.engine.matches(when)
+  }
+
+  /** `data-dio-<name>-when`, else `data-dio-when`, else the latest attach option. */
+  #ownWhen({ element, name, handles }: InstanceRecord): string | undefined {
+    const attribute =
+      element.getAttribute(`data-dio-${name}-when`) ?? element.getAttribute('data-dio-when')
+    if (attribute?.trim()) return mediaQuery(attribute.trim())
+    let when: string | undefined
+    for (const handle of handles) when = mediaQuery(handle.options.when) ?? when
+    return when
   }
 
   /** Re-evaluates a record after its sources, connection or conditions changed. */
@@ -254,6 +269,8 @@ export class Controller {
       }
       record.sync()
       this.#setStatus(record, 'waiting')
+      // `data-dio-when` can turn an instance on that never loaded.
+      this.#watchAttributes(record.element)
     }
     if (this.#isOff(record)) {
       this.#stop(record, 'off', 'disabled')
@@ -615,7 +632,7 @@ export class Controller {
   }
 
   #isOff(record: InstanceRecord): boolean {
-    return this.engine.blocked === 'off' || this.skips(record.name, record.effect)
+    return this.engine.blocked === 'off' || this.skips(record.name, record.effect, record)
   }
 
   #resume(record: InstanceRecord): void {
@@ -673,7 +690,7 @@ export class Controller {
   }
 
   #fetchThenUpdate(record: InstanceRecord): void {
-    void this.engine.fetch([record.name]).then(() => {
+    void this.engine.fetch([record]).then(() => {
       if (record.status === 'waiting') this.update(record)
     })
   }
@@ -741,6 +758,7 @@ export class Controller {
   #watchAttributes(element: Element): void {
     const names = new Set<string>()
     for (const record of this.of(element)) {
+      names.add('data-dio-when').add(`data-dio-${record.name}-when`)
       const def = this.registry.entries.get(record.name)?.effect?.['~definition']
       if (!def) continue
       for (const key of Object.keys(def.params ?? {})) {

@@ -565,7 +565,10 @@ export interface EffectDefinition<P extends ParamSpec> {
   readonly animate?: AnimatePolicy<P>
   /** 'static' (default) runs with motion inputs zeroed and time frozen. 'off' skips the effect. */
   readonly reducedMotion?: 'static' | 'off'
-  /** Media query the page must match or the instance is `off`. 'hover' means '(hover: hover)'. */
+  /**
+   * Media query the page must match or the instance is `off`. 'hover' means '(hover: hover)'.
+   * An element's `data-dio-when` (or `data-dio-<name>-when`) and the `attach` option override it.
+   */
   readonly when?: When
   /**
    * Needs the <img> or <video> as a texture. Implies `on: 'img, video'`, ready before setup.
@@ -722,6 +725,11 @@ export interface AttachOptions {
    * static grids.
    */
   readonly track?: 'layout' | 'frame'
+  /**
+   * Media query the effect runs under on these elements, 'hover' for `(hover: hover)`, 'all' for
+   * everywhere. Beats the effect's own `when`; `data-dio-when` on the element beats it.
+   */
+  readonly when?: When
   /** Aborting it detaches the handle. */
   readonly signal?: AbortSignal
 }

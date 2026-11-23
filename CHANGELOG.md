@@ -2,6 +2,12 @@
 
 All packages share one version.
 
+## 0.1.2
+
+- Phones: copies keep to their elements while the page scrolls. The canvas is as tall as the large viewport (`100lvh`), so it no longer stretches when the browser toolbar slides away, and a pinned sticky stage stops and releases the canvas on the compositor exactly where CSS sticky does.
+- `data-dio-when` and `data-dio-<effect>-when` run an element's effects under a media query and beat the effect's own `when`, so `all` keeps a hover effect on for touch screens on one element. `attach()` takes a `when` option too.
+- `stage.pin(spans)`: scroll spans over which the canvas stands still on the compositor.
+
 ## 0.1.1
 
 - The site package is `@dioramajs/diorama`: `npm i @dioramajs/diorama three`. Its command line stays `npx dioramajs`.
